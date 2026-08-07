@@ -1,0 +1,260 @@
+#include "xmpp_manager.hpp"
+
+
+
+namespace core {
+namespace xmpp {
+
+XmppManager::XmppManager(QObject *parent)
+    : QObject(parent)
+{
+    qDebug() << "instantiate";
+    initializeHandlers ();
+    initializeSignals ();
+}
+
+XmppManager::ConnectionState XmppManager::connectionState() const noexcept
+{
+    return m_connectionState;
+}
+bool XmppManager::isConnected() const noexcept
+{
+    return m_client.isConnected ();
+}
+
+void XmppManager::connectToServer(
+    const QString &jid,
+    const QString &password,
+    const QString &host,
+    quint16 port)
+{
+    const QString normalized_jid = jid.trimmed();
+    if (normalized_jid.isEmpty()) {
+        const QString error = QStringLiteral("XMPP JID cannot be empty.");
+        setLastError(error);
+        emit connectionFailed();
+        return;
+    }
+
+    if (password.isEmpty()) {
+        const QString error = QStringLiteral("XMPP password cannot be empty.");
+        setLastError(error);
+        emit connectionFailed();
+        return;
+    }
+
+    if (!normalized_jid.contains(QLatin1Char('@'))) {
+        const QString error = QStringLiteral("Invalid XMPP JID. Expected user@domain.");
+        setLastError(error);
+        emit connectionFailed();
+        return;
+    }
+
+    if (m_client.state() != QXmppClient::DisconnectedState) {
+        m_client.disconnectFromServer();
+    }
+
+    QXmppConfiguration configuration;
+    configuration.setJid(normalized_jid);
+    configuration.setPassword(password);
+    if (host != "") {
+    configuration.setHost (host);
+    }
+    // QXmpp resolves the server through the JID domain's SRV records.
+    configuration.setAutoReconnectionEnabled(true);
+
+    QXmppPresence presence;
+    presence.setType(QXmppPresence::Available);
+    presence.setStatusText(QStringLiteral("Online"));
+    updateState(ConnectionState::Connecting);
+    setLastError({});
+
+    m_client.connectToServer(configuration, presence);
+}
+
+void XmppManager::closeConnection()
+{
+    QXmppPresence presence;
+    presence.setType(QXmppPresence::Available);
+    presence.setStatusText(QStringLiteral("Offline"));
+    m_client.disconnected ();
+}
+
+
+void XmppManager::initializeHandlers()
+{
+    m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (&m_client, this);
+}
+
+void XmppManager::initializeSignals()
+{
+    connect(
+        &m_client,
+        &QXmppClient::stateChanged,
+        this,
+        [this](QXmppClient::State state) {
+            switch (state) {
+            case QXmppClient::DisconnectedState:
+                updateState (ConnectionState::Disconnected);
+                break;
+            case QXmppClient::ConnectingState:
+                updateState (ConnectionState::Connecting);
+                break;
+            case QXmppClient::ConnectedState:
+                updateState (ConnectionState::Connected);
+                // m_discovery->requestExtDiscoQuery (QStringLiteral("xabber.org"));
+                break;
+            }
+        }
+        );
+
+    connect (
+        &m_client,
+        &QXmppClient::connected,
+        this,
+        [this]() {
+            setLastError ({});
+            m_currentJid = m_client.configuration ().jid ();
+            qInfo() << "XMPP connected: " << m_client.configuration ().jid ();
+            QXmppPresence presence(QXmppPresence::Available);
+            m_client.setClientPresence (presence);
+            emit connectedChanged ();
+        }
+        );
+
+    connect(
+        &m_client,
+        &QXmppClient::disconnected,
+        this,
+        [this]() {
+            setLastError ({});
+            qInfo() << "XMPP Disconnected";
+            updateState (ConnectionState::Disconnected);
+        }
+        );
+
+    // connect (
+    //     &m_client,
+    //     &QXmppClient::error,
+    //     this,
+    //     [this](QXmppError &error) {
+    //         qWarning() << "XMPP Error:" <<error.description;
+    //     }
+    //     );
+    // connect(
+    //     &m_client,
+    //     &QXmppClient::errorOccurred,
+    //     this,
+    //     [this](QXmppError &error){
+    //         qWarning() << "Xmpp occurred:"<<error.description;
+    //     }
+    //     );
+    // connect(
+    //     &m_client,
+    //     &QXmppClient::loggerChanged,
+    //     this,
+    //     [this](QXmppLogger &logger) {
+    //         qWarning() << "XMPP Logger:" << logger.AnyMessage;
+    //     }
+    //     );
+
+    connect(
+        &m_client,
+        &QXmppClient::messageReceived,
+        this,
+        &XmppManager::onMessageReceived
+        );
+    connect(
+        &m_client,
+        &QXmppClient::presenceReceived,
+        this,
+        &XmppManager::onPresenceReceived
+        );
+    connect (
+        &m_client,
+        &QXmppClient::iqReceived,
+        this,
+        &XmppManager::onIQReceived
+        );
+
+
+
+
+    // auto *logger = m_client.logger();
+
+    // logger->setLoggingType(QXmppLogger::StdoutLogging);
+    // logger->setMessageTypes(QXmppLogger::AnyMessage);
+}
+
+
+
+void XmppManager::onMessageReceived(const QXmppMessage &message)
+{
+    const Message msg = Message::map (message);
+    emit messageReceived (msg);
+}
+
+void XmppManager::onPresenceReceived(const QXmppPresence &presence)
+{
+    QString my_bare_jid = m_currentJid.section ("/",0,0);
+    QString from_bare_jid = presence.from ().section ("/", 0,0);
+    if (my_bare_jid == from_bare_jid) {
+        return;
+    }
+    const Presence pre = Presence::map (presence);
+    qDebug() << "Presence:" << pre.from;
+    emit presenceReceived (pre);
+}
+
+void XmppManager::onIQReceived(const QXmppIq &iq)
+{
+    qDebug() << "---- XmppIQ Received -----";
+    qDebug() << "From: " << iq.from ();
+    qDebug() << "To: " << iq.to ();
+    qDebug() << "Type: " << iq.type ();
+    const QXmppElementList extensions = iq.extensions();
+
+    qDebug() << "Extension count:" << extensions.size();
+
+    for (const QXmppElement &extension : extensions) {
+        qDebug() << "Tag:" << extension.tagName();
+        qDebug() << "Namespace:" << extension.attributeNames ();
+        qDebug() << "Value:" << extension.value();
+    }
+}
+
+
+
+QString XmppManager::lastError() const
+{
+    return m_lastError;
+}
+
+QString XmppManager::currentJid() const
+{
+    return m_currentJid;
+}
+
+void XmppManager::updateState(ConnectionState state)
+{
+    if (m_connectionState == state) {
+        return;
+    }
+    m_connectionState = state;
+    qDebug() << "State Changed";
+    emit connectionStateChanged ();
+}
+
+void XmppManager::setLastError(const QString &error)
+{
+    if (m_lastError == error) {
+        return;
+    }
+    m_lastError = error;
+    emit lastErrorChanged ();
+}
+
+
+
+} // namespace xmpp
+} // namespace core

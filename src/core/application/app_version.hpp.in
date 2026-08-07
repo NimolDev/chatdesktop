@@ -1,0 +1,20 @@
+#ifndef CORE_APPLICATION_APP_VERSION_HPP
+#define CORE_APPLICATION_APP_VERSION_HPP
+
+#include <string_view>
+
+namespace core::application::build {
+
+inline constexpr std::string_view Name = "@APP_NAME@";
+inline constexpr int VersionMajor = @APP_VERSION_MAJOR@;
+inline constexpr int VersionMinor = @APP_VERSION_MINOR@;
+inline constexpr int VersionPatch = @APP_VERSION_PATCH@;
+inline constexpr std::string_view Version = "@APP_VERSION@";
+inline constexpr int BuildNumber = @APP_BUILD_NUMBER@;
+inline constexpr std::string_view BundleIdentifier = "@APP_BUNDLE_IDENTIFIER@";
+inline constexpr std::string_view OrganizationName = "@APP_ORGANIZATION_NAME@";
+inline constexpr std::string_view OrganizationDomain = "@APP_ORGANIZATION_DOMAIN@";
+
+} // namespace core::application::build
+
+#endif // CORE_APPLICATION_APP_VERSION_HPP

@@ -1,0 +1,125 @@
+#ifndef CORE_XMPP_XMPP_MANAGER_HPP
+#define CORE_XMPP_XMPP_MANAGER_HPP
+
+#include "xmpp_service_discovery.hpp"
+#include <QObject>
+#include <QString>
+#include <QXmppPresence.h>
+#include <QXmppClient.h>
+#include <QXmppMessage.h>
+
+namespace core {
+namespace xmpp {
+
+struct Message {
+    QString from;
+    QString to;
+    QXmppMessage::Type type;
+    QString body;
+
+    static Message map(const QXmppMessage &message) {
+        return {
+            message.from (),
+            message.to (),
+            message.type (),
+            message.body ()
+        };
+    }
+};
+
+struct Presence
+{
+
+    QString from;
+    QString to;
+    QXmppPresence::Type type;
+    QString status;
+
+
+    static core::xmpp::Presence map(const QXmppPresence &presence) {
+
+        return {
+            .from = presence.from (),
+            .to = presence.to(),
+            .type = presence.type (),
+            .status = presence.statusText ()
+        };
+    }
+};
+
+// struct UserResponse
+// {
+
+// };
+
+class XmppManager final: public QObject
+{
+  Q_OBJECT
+public:
+    enum class ConnectionState {
+        Disconnected,
+        Connecting,
+        Connected
+    };
+    Q_ENUM (ConnectionState);
+    explicit XmppManager(QObject *parent = nullptr);
+    [[nodiscard]]
+    ConnectionState connectionState() const noexcept;
+
+    [[nodiscard]]
+    bool isConnected() const noexcept;
+
+    [[nodiscard]]
+    QString lastError() const;
+
+    QString currentJid() const;
+
+    // void connectToServer(const QString &jid, const QString &password);
+
+    void connectToServer(
+        const QString &jid,
+        const QString &password,
+        const QString &host,
+        quint16 port
+        );
+    void closeConnection();
+
+signals:
+    void connectionStateChanged();
+    void connectionFailed();
+    void connectedChanged();
+    void lastErrorChanged();
+    void messageReceived(const core::xmpp::Message &message);
+    void presenceReceived(const core::xmpp::Presence &presence);
+    // void iqReceived()
+
+private slots:
+    void onMessageReceived(const QXmppMessage &message);
+    void onPresenceReceived(const QXmppPresence &presence);
+    void onIQReceived(const QXmppIq &iq);
+
+private:
+
+    void initializeHandlers();
+    void initializeSignals();
+    void updateState(ConnectionState state);
+    void setLastError(const QString &error);
+
+    QXmppClient m_client;
+
+    ConnectionState m_connectionState = ConnectionState::Disconnected;
+    QString m_lastError;
+    QString m_currentJid;
+
+    std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
+
+
+
+};
+
+} // namespace xmpp
+} // namespace core
+
+
+
+#endif // CORE_XMPP_XMPP_MANAGER_HPP
