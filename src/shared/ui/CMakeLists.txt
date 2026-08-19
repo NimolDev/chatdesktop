@@ -15,6 +15,11 @@ qt_add_qml_module(ui
 
     QML_FILES
         ${UI_QML_FILES}
+    SOURCES circular_image.hpp circular_image.cpp
+    QML_FILES CircleButton.qml
+    QML_FILES GlassBackground.qml
+    QML_FILES ContextMenuItem.qml
+
 )
 
 
@@ -28,5 +33,5 @@ target_link_libraries(ui
         Qt6::Quick
         Qt6::Qml
         Qt6::Core
-        Qt6::Core5Compat
+        Qt6::Network
 )

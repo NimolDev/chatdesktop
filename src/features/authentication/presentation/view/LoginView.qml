@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 import Theme
@@ -9,11 +9,11 @@ import Features.Auth
 
 Page {
     id: loginPage
-    implicitWidth: 100
-    implicitHeight: 100
-    // anchors.fill: parent
+    implicitWidth: AppLayouts.minWidth
+    implicitHeight: AppLayouts.minHeight
 
     signal loginSucceeded(string userName)
+
     Pane {
         anchors.fill: parent
         padding: 12
@@ -69,6 +69,8 @@ Page {
                     color: Colors.textPrimary
                 }
             }
+
+
             Item {
                 Layout.preferredHeight: 25
             }

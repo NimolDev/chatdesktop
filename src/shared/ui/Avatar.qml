@@ -1,7 +1,5 @@
-pragma ComponentBehavior: Bound
-import QtQuick 2.15
-import Qt5Compat.GraphicalEffects
-
+import QtQuick
+import QtQuick.Effects
 
 Item {
     id: root
@@ -10,32 +8,81 @@ Item {
 
     property alias source: avatarImage.source
     property alias fillMode: avatarImage.fillMode
-
     property color borderColor: "black"
     property int borderWidth: 2
 
+    // Image {
+    //     id: avatarImage
+    //     anchors.fill: parent
+    //     source: "qrc:/images/profile.jpeg"
+    //     fillMode: Image.PreserveAspectCrop
+    //     opacity: 0          // was visible: false — this hid it from the scene graph entirely
+    // }
 
-    Rectangle {
-        id: mask
-        anchors.fill: parent
-        radius: width / 2
-        visible: false
-    }
+    // Rectangle {
+    //     id: mask
+    //     anchors.fill: parent
+    //     radius: width / 2
+    //     opacity: 0           // same fix here
+    // }
+
+    // MultiEffect {
+    //     anchors.fill: parent
+    //     source: avatarImage
+    //     maskEnabled: true
+    //     maskSource: mask
+    // }
+
+    // Rectangle {
+    //     anchors.fill: parent
+    //     radius: width / 2
+    //     color: "transparent"
+    //     border.color: root.borderColor
+    //     border.width: root.borderWidth
+    // }
+    // Avatar.qml
 
     Image {
         id: avatarImage
         anchors.fill: parent
+
+        source: "qrc:/images/profile.jpeg"
         fillMode: Image.PreserveAspectCrop
+
+        smooth: true
+        mipmap: true
+
         layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: mask
-        }
+        layer.smooth: true
+
+        visible: false
     }
+
     Rectangle {
+        id: mask
+
         anchors.fill: parent
         radius: width / 2
-        color: "transparent"
-        border.width: root.borderWidth
-        border.color: root.borderColor
+
+        antialiasing: true
+
+        layer.enabled: true
+        layer.smooth: true
+
+        visible: false
+    }
+
+    MultiEffect {
+        anchors.fill: parent
+
+        source: avatarImage
+
+        maskEnabled: true
+        maskSource: mask
+
+        maskThresholdMin: 0.0
+        maskSpreadAtMin: 0.05
+
+        antialiasing: true
     }
 }

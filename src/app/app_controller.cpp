@@ -1,5 +1,142 @@
 #include "app_controller.hpp"
 
-AppController::AppController(QObject *parent)
-    : QObject{parent}
-{}
+#include <QDebug>
+
+
+AppController *AppController::s_instance = nullptr;
+
+AppController::AppController(
+    std::shared_ptr<domain::usecase::SessionUsecase> usecase,
+    std::shared_ptr<domain::usecase::LogoutUsecase> logout_usecase,
+    std::shared_ptr<core::xmpp::XmppManager> xmpp,
+    QObject *parent
+    )
+    : m_session(std::move (usecase)),
+    m_logout(std::move (logout_usecase)),
+    m_xmpp(std::move (xmpp)),
+    QObject(parent)
+{
+
+    // connect (
+    //     m_authReposity.get (),
+    //     &IAuthenticationRepository::logoutSucceded,
+    //     this,
+    //     [this]() {
+    //         qDebug() << "Logout Success";
+    //         setState (AppState::Unauthenticated);
+    //         emit stateChanged();
+    //     }
+    //     );
+
+    connect (
+        m_session.get (),
+        &domain::usecase::SessionUsecase::sessionChanged,
+        this,
+        [this](bool session) {
+            qDebug() << "Session" << session;
+            if (session) {
+                setState (AppState::Authenticated);
+            } else {
+                setState (AppState::Unauthenticated);
+            }
+        }
+        );
+    connect(
+        m_xmpp.get (),
+        &core::xmpp::XmppManager::connectedChanged,
+        this,
+        [this]() {
+            switch(m_xmpp->connectionState ()) {
+            case core::xmpp::XmppManager::ConnectionState::Disconnected:
+                qDebug() << "Appcontroller disconnected ";
+                // setState (AppState::Authenticated);
+            case core::xmpp::XmppManager::ConnectionState::Connecting:
+                qDebug() << "Appcontroller Connecting ";
+                // setState (AppState::Authenticated);
+            case core::xmpp::XmppManager::ConnectionState::Connected:
+                qDebug() << "Appcontroller Connected ";
+                // setState (AppState::Authenticated);
+                break;
+            }
+        }
+        );
+
+    connect (
+        m_logout.get (),
+        &domain::usecase::LogoutUsecase::sessionChanged,
+        this,
+        [this](bool logout) {
+            if (!logout) {
+                setState (AppState::Logout);
+                qDebug() << "Logout" << logout;
+            }
+        }
+        );
+
+}
+
+AppController *AppController::create(QQmlEngine *engine, QJSEngine *scriptEngine)
+{
+    Q_UNUSED(scriptEngine)
+    Q_ASSERT(s_instance);
+    Q_ASSERT(s_instance->thread() == engine->thread());
+
+    QQmlEngine::setObjectOwnership(s_instance, QQmlEngine::CppOwnership);
+    return s_instance;
+}
+
+void AppController::setInstance(AppController *instance)
+{
+    Q_ASSERT (instance);
+    s_instance = instance;
+}
+
+void AppController::getRememberUsers()
+{
+    // QSqlQuery query = core::storage::DatabaseHelper::getUserQuery ();
+
+    // query.prepare (R"(SELECT * FROM user)");
+
+    // if (!query.exec ()) {
+    //     qWarning() << query.lastError ().text ();
+    //     return;
+    // }
+
+    // QList<auth::domain::User> users;
+    // while(query.next ()) {
+    //     auth::domain::User user;
+    //     user.id = query.value ("id").toString ();
+    //     user.name = query.value ("name").toString ();
+    //     user.password = query.value ("password").toString ();
+    //     users.append (user);
+    // }
+
+    // qDebug() << "User count"<< users.count ();
+
+}
+
+AppController::AppState AppController::state() const
+{
+    return m_state;
+}
+
+void AppController::checkAuthentication()
+{
+    m_session->execute ();
+}
+
+void AppController::logout()
+{
+    // m_authReposity ->logout ();
+    m_logout->execute ();
+}
+
+void AppController::setState(AppState state)
+{
+    if (m_state == state) {
+        return;
+    }
+    m_state = state;
+    emit stateChanged();
+    // qDebug() << "State" << state;
+}

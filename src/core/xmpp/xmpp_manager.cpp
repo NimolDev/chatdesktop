@@ -1,6 +1,8 @@
 #include "xmpp_manager.hpp"
+#include "QXmppRosterManager.h"
 
-
+#include <QTimer>
+#include <QUuid>
 
 namespace core {
 namespace xmpp {
@@ -50,18 +52,41 @@ void XmppManager::connectToServer(
         return;
     }
 
+    const ConnectionParameters parameters {
+        .jid = normalized_jid,
+        .password = password,
+        .host = host.trimmed(),
+        .port = port
+    };
+
     if (m_client.state() != QXmppClient::DisconnectedState) {
+        m_pendingConnection = parameters;
         m_client.disconnectFromServer();
+        return;
     }
 
+    startConnection(parameters);
+}
+
+void XmppManager::startConnection(const ConnectionParameters &parameters)
+{
     QXmppConfiguration configuration;
-    configuration.setJid(normalized_jid);
-    configuration.setPassword(password);
-    if (host != "") {
-    configuration.setHost (host);
+    configuration.setJid(parameters.jid);
+    configuration.setPassword(parameters.password);
+    configuration.setResource (
+        QString("desktop-%1").arg (QUuid::createUuid ().toString (QUuid::WithoutBraces))
+        );
+    if (!parameters.host.isEmpty()) {
+        configuration.setHost(parameters.host);
+    }
+    if (parameters.port != 0) {
+        configuration.setPort(parameters.port);
     }
     // QXmpp resolves the server through the JID domain's SRV records.
     configuration.setAutoReconnectionEnabled(true);
+    configuration.setStreamSecurityMode (QXmppConfiguration::TLSRequired);
+
+    configuration.setIgnoreSslErrors (true);
 
     QXmppPresence presence;
     presence.setType(QXmppPresence::Available);
@@ -74,15 +99,28 @@ void XmppManager::connectToServer(
 
 void XmppManager::closeConnection()
 {
+    m_pendingConnection.reset();
+
+    if (m_client.state() == QXmppClient::DisconnectedState) {
+        updateState(ConnectionState::Disconnected);
+        return;
+    }
+
     QXmppPresence presence;
-    presence.setType(QXmppPresence::Available);
+    presence.setType(QXmppPresence::Unavailable);
     presence.setStatusText(QStringLiteral("Offline"));
-    m_client.disconnected ();
+    m_client.setClientPresence(presence);
+    m_client.disconnectFromServer();
 }
 
 
 void XmppManager::initializeHandlers()
 {
+    m_roster = m_client.findExtension<QXmppRosterManager>();
+    if (!m_roster) {
+        qWarning() << "QXmppRosterManager not available";
+    }
+
     m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (&m_client, this);
 }
 
@@ -93,13 +131,21 @@ void XmppManager::initializeSignals()
         &QXmppClient::stateChanged,
         this,
         [this](QXmppClient::State state) {
+
+            // qDebug() << "Status: " << state;
             switch (state) {
             case QXmppClient::DisconnectedState:
                 updateState (ConnectionState::Disconnected);
+                qDebug() << "Status: " << state;
                 break;
-            case QXmppClient::ConnectingState:
+            case QXmppClient::ConnectingState: {
                 updateState (ConnectionState::Connecting);
+                QXmppPresence presence;
+                presence.setType(QXmppPresence::Available);
+                presence.setStatusText(QStringLiteral("Online"));
+                m_client.clientPresence ();
                 break;
+            }
             case QXmppClient::ConnectedState:
                 updateState (ConnectionState::Connected);
                 // m_discovery->requestExtDiscoQuery (QStringLiteral("xabber.org"));
@@ -118,6 +164,7 @@ void XmppManager::initializeSignals()
             qInfo() << "XMPP connected: " << m_client.configuration ().jid ();
             QXmppPresence presence(QXmppPresence::Available);
             m_client.setClientPresence (presence);
+            m_client.setClientPresence (presence);
             emit connectedChanged ();
         }
         );
@@ -130,8 +177,41 @@ void XmppManager::initializeSignals()
             setLastError ({});
             qInfo() << "XMPP Disconnected";
             updateState (ConnectionState::Disconnected);
+
+            if (!m_pendingConnection.has_value()) {
+                return;
+            }
+
+            const ConnectionParameters parameters =
+                std::move(m_pendingConnection.value());
+            m_pendingConnection.reset();
+
+            // Let QXmpp finish tearing down its socket before reconnecting.
+            QTimer::singleShot(0, this, [this, parameters] {
+                if (m_client.state() == QXmppClient::DisconnectedState) {
+                    startConnection(parameters);
+                } else {
+                    m_pendingConnection = parameters;
+                }
+            });
         }
         );
+    if (m_roster) {
+        connect(
+            m_roster,
+            &QXmppRosterManager::subscriptionRequestReceived,
+            this,
+            [this](const QString &jid, const QXmppPresence &presence) {
+                qDebug() << "Subscription request from:" << jid;
+                qDebug() << "Presence from:" << presence.from();
+
+                if (!m_roster->acceptSubscription(jid)) {
+                    qWarning() << "Failed to accept subscription from:" << jid;
+                }
+            }
+            );
+    }
+
 
     // connect (
     //     &m_client,
@@ -180,6 +260,7 @@ void XmppManager::initializeSignals()
 
 
 
+
     // auto *logger = m_client.logger();
 
     // logger->setLoggingType(QXmppLogger::StdoutLogging);
@@ -196,14 +277,14 @@ void XmppManager::onMessageReceived(const QXmppMessage &message)
 
 void XmppManager::onPresenceReceived(const QXmppPresence &presence)
 {
-    QString my_bare_jid = m_currentJid.section ("/",0,0);
-    QString from_bare_jid = presence.from ().section ("/", 0,0);
-    if (my_bare_jid == from_bare_jid) {
-        return;
-    }
-    const Presence pre = Presence::map (presence);
-    qDebug() << "Presence:" << pre.from;
-    emit presenceReceived (pre);
+    // QString my_bare_jid = m_currentJid.section ("/",0,0);
+    // QString from_bare_jid = presence.from ().section ("/", 0,0);
+    // if (my_bare_jid == from_bare_jid) {
+    //     return;
+    // }
+    // const Presence pre = Presence::map (presence);
+    qDebug() << "Presence:" << presence.from ();
+    // emit presenceReceived (pre);
 }
 
 void XmppManager::onIQReceived(const QXmppIq &iq)
@@ -241,7 +322,7 @@ void XmppManager::updateState(ConnectionState state)
         return;
     }
     m_connectionState = state;
-    qDebug() << "State Changed";
+    // qDebug() << "State Changed";
     emit connectionStateChanged ();
 }
 

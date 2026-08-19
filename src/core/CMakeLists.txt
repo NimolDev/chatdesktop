@@ -1,4 +1,6 @@
+add_subdirectory(constants)
 add_subdirectory(application)
 add_subdirectory(network)
 add_subdirectory(xmpp)
 add_subdirectory(storage)
+add_subdirectory(utils)

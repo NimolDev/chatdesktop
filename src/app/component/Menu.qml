@@ -1,5 +1,5 @@
 import QtQuick 2.15
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 import Shared.UI
@@ -18,6 +18,9 @@ Page {
     property bool isCompactMode: width <= AppLayouts.minWidth
     readonly property int _padding: 8
     readonly property int _menuHeight: 40
+
+    property int selectedIndex:  1
+    signal logoutClicked()
 
     background: Rectangle {
         color: Colors.background
@@ -102,19 +105,20 @@ Page {
                         title: AppStrings.contacts
                         menuIcon: AppAssets.icContact
                         ButtonGroup.group: menuGroup
-                        checked: true
+
                         isCompactMode: root.isCompactMode
+                        onClicked: root.selectedIndex = 0
                     }
                     MenuButton {
                         id: chat
                         Layout.preferredHeight: root._menuHeight
                         Layout.fillWidth: true
                         title: AppStrings.chat
+                        checked: true
                         menuIcon: AppAssets.icChat
                         ButtonGroup.group: menuGroup
                         isCompactMode: root.isCompactMode
-                        onClicked: {
-                        }
+                       onClicked: root.selectedIndex = 1
                     }
                     MenuButton {
                         Layout.preferredHeight: root._menuHeight
@@ -122,7 +126,8 @@ Page {
                         title: AppStrings.iot
                         menuIcon: AppAssets.icIoT
                         ButtonGroup.group: menuGroup
-                        isCompactMode: root.isCompactMode
+                         isCompactMode: root.isCompactMode
+                        onClicked: root.selectedIndex = 2
                     }
                     MenuButton {
                         Layout.preferredHeight: root._menuHeight
@@ -130,7 +135,8 @@ Page {
                         title: AppStrings.utility
                         menuIcon: AppAssets.icUtility
                         ButtonGroup.group: menuGroup
-                        isCompactMode: root.isCompactMode
+                         isCompactMode: root.isCompactMode
+                        onClicked: root.selectedIndex = 3
                     }
                     MenuButton {
                         Layout.preferredHeight: root._menuHeight
@@ -138,13 +144,9 @@ Page {
                         title: AppStrings.settings
                         menuIcon: AppAssets.icSetting
                         ButtonGroup.group: menuGroup
-                        isCompactMode: root.isCompactMode
+                         isCompactMode: root.isCompactMode
+                        onClicked: root.selectedIndex = 4
                     }
-
-
-
-
-
 
                     Item {
                         Layout.fillHeight: true
@@ -162,7 +164,7 @@ Page {
                         ColumnLayout {
                             anchors.horizontalCenter: parent.horizontalCenter
 
-                            Avatar {
+                            CircularImage {
                                 Layout.preferredHeight: 45
                                 Layout.preferredWidth: 45
                                 // source: AppAssets.profile
@@ -201,6 +203,7 @@ Page {
                         columnSpacing: 0
 
                         Button {
+                            id: btnQrCode
                             Layout.preferredHeight: root._menuHeight
                             Layout.preferredWidth: root._menuHeight
                             icon.source: AppAssets.icQR
@@ -216,6 +219,7 @@ Page {
                         }
 
                         Button {
+                            id: btnLogout
                             Layout.preferredHeight: root._menuHeight
                             Layout.preferredWidth: root._menuHeight
                             icon.source: AppAssets.icExit
@@ -230,6 +234,7 @@ Page {
                             HoverHandler {
                                 cursorShape: Qt.PointingHandCursor
                             }
+                            onClicked: root.logoutClicked();
                         }
 
 
@@ -254,12 +259,14 @@ Page {
         }
 
         // --- Loader ----
-
         Loader {
           id: loader
           Layout.fillWidth: true
           Layout.fillHeight: true
-          sourceComponent: chatPage
+          sourceComponent: switch (root.selectedIndex) {
+                           case 1: return chatPage
+
+                           }
         }
     }
 

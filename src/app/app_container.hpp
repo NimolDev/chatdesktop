@@ -17,8 +17,10 @@ public:
 
 private:
     void registerCoreService();
+    void registerAppController();
     void registerQmlSignleton();
     void registerAuthentication();
+    void registerChat();
 
 
     ServiceContainer m_container;

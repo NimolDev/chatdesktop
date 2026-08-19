@@ -77,7 +77,8 @@ bool DatabaseManager::initialize()
         return false;
     }
 
-    return createTables();
+    // return createTables();
+    return true;
 }
 
 void DatabaseManager::close()
@@ -119,7 +120,7 @@ bool DatabaseManager::createTables()
     QSqlQuery query(database);
 
     const QString createUserTable = QStringLiteral (R"(
-        CREATE TABLE IF NOT EXISTS user (
+        CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
@@ -131,9 +132,7 @@ bool DatabaseManager::createTables()
     if (!executeQuery (query, createUserTable)) {
         return false;
     }
-
     return true;
-
 }
 
 

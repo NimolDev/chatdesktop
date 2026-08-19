@@ -1,11 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 
 
 import Shared.UI
 import Theme
+import Features.Chat
+
 import "components" as Components
 
 Item {
@@ -20,6 +22,12 @@ Item {
 
     signal searchClicked()
     signal itemClicked(int index)
+
+
+    Component.onCompleted: {
+        ConversationsVM.fetchConversations();
+    }
+
     Pane {
         padding: 4
         anchors.fill: parent
@@ -77,6 +85,10 @@ Item {
                         root.isSelected = true
                         root.itemClicked(index)
                     }
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                 }
 
             }

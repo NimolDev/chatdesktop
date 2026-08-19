@@ -1,12 +1,15 @@
 #ifndef CORE_XMPP_XMPP_MANAGER_HPP
 #define CORE_XMPP_XMPP_MANAGER_HPP
 
+#include "QXmppRosterManager.h"
 #include "xmpp_service_discovery.hpp"
 #include <QObject>
 #include <QString>
 #include <QXmppPresence.h>
 #include <QXmppClient.h>
 #include <QXmppMessage.h>
+
+#include <optional>
 
 namespace core {
 namespace xmpp {
@@ -99,21 +102,28 @@ private slots:
     void onIQReceived(const QXmppIq &iq);
 
 private:
+    struct ConnectionParameters {
+        QString jid;
+        QString password;
+        QString host;
+        quint16 port = 0;
+    };
 
     void initializeHandlers();
     void initializeSignals();
+    void startConnection(const ConnectionParameters &parameters);
     void updateState(ConnectionState state);
     void setLastError(const QString &error);
 
     QXmppClient m_client;
+    QXmppRosterManager *m_roster = nullptr;
 
     ConnectionState m_connectionState = ConnectionState::Disconnected;
     QString m_lastError;
     QString m_currentJid;
+    std::optional<ConnectionParameters> m_pendingConnection;
 
     std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
-
-
 
 };
 

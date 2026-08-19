@@ -1,6 +1,6 @@
 // shared/ui/SplashScreen.qml
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import Theme
 // import Localization
 

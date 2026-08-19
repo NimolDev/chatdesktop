@@ -1,9 +1,10 @@
 import QtQuick 2.15
 import QtQuick.Layouts
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 
 import Theme
 import Shared.UI
+// import App.Components
 
 Item {
     id: root
@@ -34,11 +35,11 @@ Item {
                 id: profile
                 Layout.fillHeight: true
                 Layout.preferredWidth: height
-                Avatar {
+                CircularImage {
                     id: imgProfile
                     anchors.fill: profile
-                    source: "https://photosvibes.com/wp-content/uploads/2026/05/shinchan-pic-3.jpg"
-                    borderWidth: 0
+                    source: AppAssets.profile
+                    // borderWidth: 0
                 }
                 Rectangle {
                     visible: true
@@ -93,7 +94,7 @@ Item {
                     text: "Mon 22"
                     color: Colors.primary
                     font.family: Typography.family
-                    font.pointSize: Typography.caption
+                    font.pixelSize: Typography.caption
                     font.weight: Typography.regular
                     Layout.alignment: Qt.AlignRight
                 }

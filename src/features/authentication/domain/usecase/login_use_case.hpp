@@ -2,7 +2,8 @@
 #define FEATURES_AUTHENTICATION_DOMAIN_USECASE_LOGIN_USE_CASE_HPP
 
 // #include <data/login_repository_impl.hpp>
-#include <login_repository.hpp>
+#include "domain/entity/login_request.hpp"
+#include "domain/repository/login_repository.hpp"
 #include <QObject>
 
 namespace domain {
@@ -13,19 +14,20 @@ class LoginUseCase : public QObject
     Q_OBJECT
 public:
     explicit LoginUseCase(
-         std::shared_ptr<LoginRepository> repository,
+         std::shared_ptr<domain::repository::LoginRepository> repository,
         QObject *parent = nullptr
         );
-    void execute(LoginRequest request);
+    void execute(domain::entity::LoginRequest request);
 
 signals:
-    void loginSuccessed(domain::LoginResponse response);
+    void loginSucceded();
     void loginFailed();
     void connecting();
-    // void loginResponsed(domain::LoginResponse response);
+    void connected();
+
 
 private:
-    std::shared_ptr<LoginRepository> m_repository;
+    std::shared_ptr<domain::repository::LoginRepository> m_repository;
 };
 
 } // namespace usecase

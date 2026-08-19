@@ -27,5 +27,47 @@
         <file>background/background.jpg</file>
         <file>icons/icSetting@2x.png</file>
         <file>icons/icSetting@3x.png</file>
+        <file>icons/check.png</file>
+        <file>icons/check@2.png</file>
+        <file>icons/check@3.png</file>
+        <file>icons/double-check.png</file>
+        <file>icons/double-check@2.png</file>
+        <file>icons/double-check@3.png</file>
+        <file>icons/ellipsis.png</file>
+        <file>icons/ellipsis@2x.png</file>
+        <file>icons/ellipsis@3x.png</file>
+        <file>icons/phone.png</file>
+        <file>icons/phone@2x.png</file>
+        <file>icons/phone@3x.png</file>
+        <file>icons/video.png</file>
+        <file>icons/video@2x.png</file>
+        <file>icons/video@3x.png</file>
+        <file>icons/face.smiling.png</file>
+        <file>icons/face.smiling@2x.png</file>
+        <file>icons/face.smiling@3x.png</file>
+        <file>icons/microphone.png</file>
+        <file>icons/microphone@2x.png</file>
+        <file>icons/microphone@3x.png</file>
+        <file>icons/paperclip.png</file>
+        <file>icons/paperclip@2x.png</file>
+        <file>icons/paperclip@3x.png</file>
+        <file>icons/paperplane.png</file>
+        <file>icons/paperplane@2x.png</file>
+        <file>icons/paperplane@3x.png</file>
+        <file>icons/bell.slash.png</file>
+        <file>icons/bell.slash@2x.png</file>
+        <file>icons/bell.slash@3x.png</file>
+        <file>icons/nosign.png</file>
+        <file>icons/nosign@2x.png</file>
+        <file>icons/nosign@3x.png</file>
+        <file>icons/person.crop.circle.png</file>
+        <file>icons/person.crop.circle@2x.png</file>
+        <file>icons/person.crop.circle@3x.png</file>
+        <file>icons/photo.png</file>
+        <file>icons/photo@2x.png</file>
+        <file>icons/photo@3x.png</file>
+        <file>icons/xmark.png</file>
+        <file>icons/xmark@2x.png</file>
+        <file>icons/xmark@3x.png</file>
     </qresource>
 </RCC>

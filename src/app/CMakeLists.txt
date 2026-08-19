@@ -35,6 +35,7 @@ qt_add_qml_module(ChatApp
         service_container.hpp
         app_container.hpp app_container.cpp
         app_controller.hpp app_controller.cpp
+    # RESOURCES Info.plist
 )
 
 
@@ -64,8 +65,11 @@ set_target_properties(ChatApp PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER "${APP_BUNDLE_IDENTIFIER}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION}"
     MACOSX_BUNDLE_BUNDLE_VERSION "${APP_BUILD_NUMBER}"
-    # MACOSX_BUNDLE_COPYRIGHT "© 2026 Nimol. All rights reserved.";
     MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_INFO_PLIST
+        "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+
+    # MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
 
@@ -74,14 +78,16 @@ target_link_libraries(ChatApp
         Qt6::Quick
         # Qt6::QuickControls2
         Qt6::Gui
+        constants
         resources
         localization
         theme
         ui
         core::application
         core::storage
+        core::utils
         authentication
-        authenticationplugin
+        # authenticationplugin
         chat
 )
 
@@ -91,3 +97,11 @@ install(TARGETS ChatApp
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+qt_generate_deploy_qml_app_script(
+
+    TARGET ChatApp
+    OUTPUT_SCRIPT deploy_script
+
+)
+
+install(SCRIPT ${deploy_script})

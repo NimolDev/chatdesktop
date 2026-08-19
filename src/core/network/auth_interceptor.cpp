@@ -3,6 +3,7 @@
 
 namespace core {
 namespace network {
+namespace logging {
 
 AuthInterceptor::AuthInterceptor(TokenProvider token_provider)
     : m_tokenProvider(std::move (token_provider))
@@ -28,8 +29,6 @@ void AuthInterceptor::interceptRequest(NetworkRequest &request)
         );
 }
 
-
-
+} // namespace logging
 } // namespace network
 } // namespace core
-

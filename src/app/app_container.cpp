@@ -1,33 +1,78 @@
 #include "app_container.hpp"
 
-#include "login_repository_impl.hpp"
+#include "app_controller.hpp"
+
+#include "constants/app_constants.hpp"
+#include "repository/conversations_repository_impl.hpp"
 #include "xmpp/xmpp_manager.hpp"
+#include "network/auth_interceptor.hpp"
 #include "network/network_client.hpp"
 #include "network/logging_interceptor.hpp"
 
-// #include "authentication/data/login_repository_impl.hpp"
-// #include "authentication/domain/login_repository.hpp"
-// #include "authentication/domain/usecase/login_use_case.hpp"
 #include "authentication/presentation/viewmodel/login_vm.hpp"
+#include "authentication/data/local/login_response_store.hpp"
+#include "authentication/data/repository/login_repository_impl.hpp"
+#include "authentication/data/repository/session_repository_impl.hpp"
+
+#include "chat/domain/repository/conversation_list_repository.hpp"
+#include "chat/domain/usecase/conversations_usecase.hpp"
+#include "chat/presentation/viewmodel/messaging_view_model.hpp"
+#include "chat/presentation/viewmodel/conversations_vm.hpp"
 
 AppContainer::AppContainer(QQmlApplicationEngine *engine)
     : m_engine(engine)
 {
     registerCoreService ();
+    registerAppController ();
     registerAuthentication ();
-    // registerQmlSignleton ();
+    registerChat ();
 }
 
 void AppContainer::registerCoreService()
 {
+    m_container.registerSingleton<core::network::logging::AuthInterceptor> (
+        [](ServiceContainer &) {
+            return std::make_shared<core::network::logging::AuthInterceptor> ([] {
+                const auto user = data::local::LoginResponseStore::getLocalUser();
+                return user.has_value() ? user->access_token : QString {};
+            });
+        });
+
+    m_container.registerSingleton<core::network::logging::LoggingInterceptor> (
+        [](ServiceContainer &) {
+            return std::make_shared<core::network::logging::LoggingInterceptor> ();
+        });
+
     m_container.registerFactory<core::network::NetworkClient> ([](ServiceContainer &c) {
-        auto client = std::make_shared<core::network::NetworkClient> (QStringLiteral (""));
+        auto client = std::make_shared<core::network::NetworkClient> (core::constants::AppConstants::baseUrl ());
+        client->addInterceptor (c.resolve<core::network::logging::AuthInterceptor> ());
         client->addInterceptor (c.resolve<core::network::logging::LoggingInterceptor> ());
         return client;
     });
     m_container.registerSingleton<core::xmpp::XmppManager> ([](ServiceContainer &c) {
         return std::make_shared<core::xmpp::XmppManager> ();
     });
+}
+
+void AppContainer::registerAppController()
+{
+    m_container.registerFactory<domain::repository::SessionRepository> ([](ServiceContainer &c) {
+        return std::make_shared<data::repository::SessionRepositoryImpl> (c.resolve<core::xmpp::XmppManager> ());
+    });
+    m_container.registerFactory<domain::usecase::SessionUsecase> ([](ServiceContainer &c) {
+        return std::make_shared<domain::usecase::SessionUsecase> (c.resolve<domain::repository::SessionRepository> ());
+    });
+    m_container.registerFactory<domain::usecase::LogoutUsecase> ([](ServiceContainer &c) {
+        return std::make_shared<domain::usecase::LogoutUsecase> (c.resolve<domain::repository::SessionRepository> ());
+    });
+    m_container.registerSingleton<AppController> ([](ServiceContainer &c) {
+        return std::make_shared<AppController> (
+            c.resolve<domain::usecase::SessionUsecase> (),
+            c.resolve<domain::usecase::LogoutUsecase> (),
+            c.resolve<core::xmpp::XmppManager> ()
+            );
+    });
+    AppController::setInstance (m_container.resolve<AppController> ().get ());
 }
 
 void AppContainer::registerQmlSignleton()
@@ -37,15 +82,38 @@ void AppContainer::registerQmlSignleton()
 
 void AppContainer::registerAuthentication()
 {
-    m_container.registerFactory<domain::LoginRepository>([](ServiceContainer &c) {
-        return std::make_shared<data::LoginRepositoryImpl> (c.resolve<core::xmpp::XmppManager> ());
+    m_container.registerFactory<domain::repository::LoginRepository>([](ServiceContainer &c) {
+        return std::make_shared<data::repository::LoginRepositoryImpl> (
+            c.resolve<core::xmpp::XmppManager> (),
+            c.resolve<core::network::NetworkClient> ()
+            );
     });
     m_container.registerFactory<domain::usecase::LoginUseCase> ([] (ServiceContainer &c) {
-        return std::make_shared<domain::usecase::LoginUseCase> (c.resolve<domain::LoginRepository> ());
+        return std::make_shared<domain::usecase::LoginUseCase> (c.resolve<domain::repository::LoginRepository> ());
     });
     m_container.registerSingleton<LoginVM> ([](ServiceContainer &c) {
         return std::make_shared<LoginVM> (c.resolve<domain::usecase::LoginUseCase> ());
     });
 
     LoginVM::setInstance(m_container.resolve<LoginVM>().get());
+}
+
+void AppContainer::registerChat()
+{
+    m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
+        return  std::make_shared<MessagingViewModel> ();
+    });
+    MessagingViewModel::setInstance (m_container.resolve<MessagingViewModel> ().get ());
+
+    m_container.registerFactory<domain::repository::ConversationListRepository> ([](ServiceContainer &c) {
+        return std::make_shared<data::repository::ConversationsRepositoryImpl> (c.resolve<core::network::NetworkClient> ());
+    });
+    m_container.registerFactory<domain::usecase::ConversationsUsecase> ([](ServiceContainer &c) {
+        return std::make_shared<domain::usecase::ConversationsUsecase> (c.resolve<domain::repository::ConversationListRepository> ());
+    });
+    m_container.registerSingleton<ConversationsVM> ([](ServiceContainer &c) {
+        return std::make_shared<ConversationsVM> (c.resolve<domain::usecase::ConversationsUsecase> ());
+    });
+    ConversationsVM::setInstance (m_container.resolve<ConversationsVM> ().get ());
+
 }

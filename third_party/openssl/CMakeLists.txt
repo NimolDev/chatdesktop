@@ -74,6 +74,18 @@ foreach(required_file
     endif()
 endforeach()
 
+# QXmpp calls find_package(OpenSSL) from a sibling directory. Publish the
+# bundled paths in the cache so FindOpenSSL uses these artifacts instead of a
+# system installation (and replaces any stale paths in an existing build).
+set(OPENSSL_ROOT_DIR "${OPENSSL_ROOT}" CACHE PATH
+    "Root directory of the bundled OpenSSL installation" FORCE)
+set(OPENSSL_INCLUDE_DIR "${OPENSSL_INCLUDE_DIR}" CACHE PATH
+    "Bundled OpenSSL include directory" FORCE)
+set(OPENSSL_SSL_LIBRARY "${OPENSSL_SSL_LIBRARY}" CACHE FILEPATH
+    "Bundled OpenSSL SSL library" FORCE)
+set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_CRYPTO_LIBRARY}" CACHE FILEPATH
+    "Bundled OpenSSL Crypto library" FORCE)
+
 
 add_library(bundled_openssl_crypto STATIC IMPORTED GLOBAL)
 

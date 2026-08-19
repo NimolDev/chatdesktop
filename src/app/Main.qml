@@ -8,6 +8,7 @@ import QtQuick.Window
 import Localization
 import Theme
 import Features.Auth
+import ChatApp
 
 import "component" as AppComponent
 
@@ -27,7 +28,38 @@ ApplicationWindow {
     property color reallyLight: "#e7e7e7"
     property color light: Colors.primary
     readonly property Window aboutDialog: aboutDialogLoader.item as Window
-    menuBar: MenuBar {
+    menuBar:  Qt.platform.os === "osx" ? menuBar : null
+
+    Component.onCompleted: AppController.checkAuthentication()
+    Connections {
+        target: AppController
+        function onStateChanged() {
+            var state = AppController.state
+            switch(AppController.state ) {
+            case AppController.Unauthenticated:
+                stackLayout.currentIndex = 0
+                break
+            case AppController.Logout:
+                stackLayout.currentIndex = 0
+                break
+            default:
+                stackLayout.currentIndex = 1
+                break
+            }
+        }
+    }
+    Connections {
+        target: LoginVM
+        function onLoginSucceeded() {
+            stackLayout.currentIndex = 1
+        }
+    }
+
+
+    MenuBar {
+        id: menuBar
+          visible: Qt.platform.os === "osx"
+
         Menu {
             title: qsTr("Help")
             Action {
@@ -96,7 +128,7 @@ ApplicationWindow {
     StackLayout {
         id: stackLayout
         anchors.fill: parent
-        currentIndex: 1
+        currentIndex: 0
 
         LoginView {
             implicitWidth: 200
@@ -108,9 +140,12 @@ ApplicationWindow {
 
         AppComponent.Menu {
 
+            onLogoutClicked: {
+
+                AppController.logout()
+                stackLayout.currentIndex = 0
+            }
         }
-
-
 
    }
 

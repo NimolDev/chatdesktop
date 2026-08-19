@@ -7,6 +7,8 @@
 
 namespace core {
 namespace network {
+namespace logging {
+
 
 class AuthInterceptor final: public INetworkInterceptor
 {
@@ -23,6 +25,7 @@ private:
     TokenProvider m_tokenProvider;
 };
 
+} // namespace logging
 } // namespace network
 } // namespace core
 

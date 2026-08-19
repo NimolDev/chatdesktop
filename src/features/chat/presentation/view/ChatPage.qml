@@ -1,6 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 
 import Theme
 
@@ -163,12 +163,18 @@ Page {
         anchors.left: splitHandle.right
         anchors.right: parent.right
 
-        sourceComponent: messagingEmpty
+        sourceComponent: d.itemSelectedIndex != -1 ? messagingList : messagingEmpty
     }
 
     Component {
         id: messagingEmpty
         MessagingEmpty {
+            anchors.fill: parent
+        }
+    }
+    Component {
+        id: messagingList
+        ListMessaging {
             anchors.fill: parent
         }
     }

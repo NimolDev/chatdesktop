@@ -31,9 +31,6 @@ configure_file(
     @ONLY
 )
 
-
-
-
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOMOC ON)
@@ -43,41 +40,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Quick
-    Concurrent
-    Qml
+    # Qml
     Network
     LinguistTools
-    Xml
+    # Xml
     Core
     Sql
-    Core5Compat
-    QuickControls2
+    Positioning
+    Location
 )
-# find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS
-#     Quick
-#     Concurrent
-#     Qml
-#     Network
-#     LinguistTools
-#     Xml
-#     Core
-#     Sql
-# )
-# find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS
-#     Quick
-#     Concurrent
-#     Qml
-#     Network
-#     LinguistTools
-#     Xml
-#     Core
-#     Sql
-# )
 
-# if (QT_VERSION_MAJOR EQUAL 6)
-#     qt_standard_project_setup(REQUIRES 6.5)
-# endif()
- qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.5)
 
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
 
@@ -91,8 +64,7 @@ endif()
 #     I18N_SOURCE_LANGUAGE en
 #     I18N_TRANSLATED_LANGUAGES km
 # )
-
-
+add_subdirectory(tools/string_encryptor)
 add_subdirectory(resources)
 add_subdirectory(third_party)
 add_subdirectory(src)

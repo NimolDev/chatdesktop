@@ -13,7 +13,7 @@ Button {
 
     background: Rectangle {
         radius: 12
-        color: control.down ? Colors.primary600 : Colors.primary
+        color: control.down ? Colors.primary700 : Colors.primary600
 
 
     }
