@@ -15,6 +15,13 @@ Rectangle {
     signal emojiSideToggleRequested()
     signal heightDelta(real delta)
 
+    function resetState() {
+        messageInput.clear()
+        attachmentPopup.close()
+        emojiPopup.close()
+        emojiCloseTimer.stop()
+    }
+
     function submit() {
         const text = messageInput.text.trim()
         if (text.length === 0)

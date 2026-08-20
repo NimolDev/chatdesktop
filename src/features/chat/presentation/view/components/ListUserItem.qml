@@ -15,6 +15,8 @@ Item {
     property bool isCompactMode: false
     property bool isSeen: true
     property int padding: 0
+    property string username: "Username"
+    property string message: "Message"
 
 
     property bool isSelected: false
@@ -61,7 +63,8 @@ Item {
                 Layout.fillHeight: true
                 spacing: 4
                 Label {
-                    text: "Username"
+                    id: txtUsername
+                    text: root.username
                     font.family: Typography.family
                     font.pixelSize: Typography.body
                     font.weight: Typography.medium

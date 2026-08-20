@@ -16,8 +16,11 @@
 
 #include "chat/domain/repository/conversation_list_repository.hpp"
 #include "chat/domain/usecase/conversations_usecase.hpp"
-#include "chat/presentation/viewmodel/messaging_view_model.hpp"
 #include "chat/presentation/viewmodel/conversations_vm.hpp"
+#include "chat/domain/repository/message_repository.hpp"
+#include "chat/data/repository/message_repository_impl.hpp"
+#include "chat/domain/usecase/message_usecase.hpp"
+#include "chat/presentation/viewmodel/messaging_vm.hpp"
 
 AppContainer::AppContainer(QQmlApplicationEngine *engine)
     : m_engine(engine)
@@ -100,8 +103,14 @@ void AppContainer::registerAuthentication()
 
 void AppContainer::registerChat()
 {
+    m_container.registerFactory<domain::repository::MessageRepository> ([](ServiceContainer &c) {
+        return std::make_shared<data::repository::MessageRepositoryImpl> (c.resolve<core::network::NetworkClient> ());
+    });
+    m_container.registerFactory<domain::usecase::MessageUsecase> ([](ServiceContainer &c) {
+        return std::make_shared<domain::usecase::MessageUsecase> (c.resolve<domain::repository::MessageRepository> ());
+    });
     m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
-        return  std::make_shared<MessagingViewModel> ();
+        return  std::make_shared<MessagingViewModel> (c.resolve<domain::usecase::MessageUsecase> ());
     });
     MessagingViewModel::setInstance (m_container.resolve<MessagingViewModel> ().get ());
 

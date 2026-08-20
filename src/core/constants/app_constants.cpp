@@ -7,6 +7,7 @@
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <QByteArray>
+#include <QUrl>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -301,6 +302,14 @@ QString AppConstants::login()
 QString AppConstants::conversations()
 {
     return getKey(generated::app_constants::kUsers);
+}
+
+QString AppConstants::messages(const QString &user_id)
+{
+    QString path = getKey(generated::app_constants::kMessagesByUser);
+    const QString encoded_user_id = QString::fromUtf8(
+        QUrl::toPercentEncoding(user_id.trimmed()));
+    return path.replace(QStringLiteral("{userId}"), encoded_user_id);
 }
 
 

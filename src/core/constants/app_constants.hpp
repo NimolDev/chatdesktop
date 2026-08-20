@@ -18,6 +18,7 @@ public:
     [[nodiscard]]
     static QString login();
     static QString conversations();
+    static QString messages(const QString &user_id);
 
 };
 

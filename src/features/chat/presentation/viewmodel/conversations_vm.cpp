@@ -8,8 +8,15 @@ ConversationsVM::ConversationsVM(
     QObject *parent
     )
     : m_usecase(std::move (usecase)),
-    QObject(parent)
-{}
+    QAbstractListModel(parent)
+{
+    connect(
+        &m_watcher,
+        &QFutureWatcher<QList<domain::entity::ConversationList>>::finished,
+        this,
+        &ConversationsVM::onFinished
+        );
+}
 
 ConversationsVM *ConversationsVM::create(QQmlEngine *engine, QJSEngine *scriptEngine)
 {
@@ -29,6 +36,56 @@ void ConversationsVM::setInstance(ConversationsVM *instance)
 
 void ConversationsVM::fetchConversations()
 {
-    m_usecase->execute ();
+    // m_usecase->execute ();
+    m_watcher.setFuture (m_usecase->execute ());
+}
+
+int ConversationsVM::rowCount(const QModelIndex &parent) const
+{
+
+    if (parent.isValid ()) {
+        qDebug() << "Parent invalide";
+        return 0;
+    }
+    return m_conversations.size();
+    // return 12;
+
+}
+
+QVariant ConversationsVM::data(const QModelIndex &index, int role) const
+{
+    if (!index.isValid ()
+        || index.row () < 0
+        || index.row () >= m_conversations.size ()
+        ) {
+        return {};
+    }
+
+    const auto &conversation = m_conversations[index.row ()];
+    switch (role) {
+    case UuidRole:
+        return conversation.uuid;
+    case NameRole:
+        return conversation.name;
+    default:
+        return {};
+    }
+}
+
+
+QHash<int, QByteArray> ConversationsVM::roleNames() const
+{
+    return {
+        { UuidRole, "uuid" },
+        { NameRole, "name" }
+    };
+}
+
+void ConversationsVM::onFinished()
+{
+    auto conversations = m_watcher.result ();
+    beginResetModel ();
+    m_conversations = std::move (conversations);
+    endResetModel ();
 }
 

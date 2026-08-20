@@ -3,8 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 import Theme
-import Features.Chat
-
 import "components" as Components
 
 Item {
@@ -14,6 +12,8 @@ Item {
     implicitHeight: AppLayouts.minHeight
     anchors.fill: parent
 
+    property var model
+    property bool isVisible
     property string userName: "User"
     property string userStatus: "Last Seen Recently"
     property bool isOnline: false
@@ -54,6 +54,18 @@ Item {
         selectedMessages = ({});
         selectedCount = 0;
         selectionRevision++;
+    }
+
+    function resetState() {
+        clearSelection();
+        messageMenu.close();
+        composer.resetState();
+
+        if (isShowEmojiSide) {
+            isShowEmojiSide = false;
+            if (Window.window)
+                Window.window.width -= rigthSideContainer.width;
+        }
     }
 
     Connections {
@@ -108,7 +120,9 @@ Item {
             bottom: composer.top
         }
 
-        model: MessagingViewModel
+        // model: MessagingViewModel
+        model: root.model
+        isVisible: root.isVisible
         selectionMode: root.selectionMode
         selectionRevision: root.selectionRevision
         selectionLookup: index => root.isMessageSelected(index)

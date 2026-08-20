@@ -30,8 +30,8 @@ qt_add_qml_module(chat
     SOURCES
         presentation/view/bubble.hpp
         presentation/view/bubble.cpp
-        presentation/viewmodel/messaging_view_model.hpp
-        presentation/viewmodel/messaging_view_model.cpp
+        presentation/viewmodel/messaging_vm.hpp
+        presentation/viewmodel/messaging_vm.cpp
         domain/messaging.hpp
 
         domain/repository/conversation_list_repository.hpp
@@ -43,6 +43,11 @@ qt_add_qml_module(chat
         presentation/viewmodel/conversations_vm.hpp
         presentation/viewmodel/conversations_vm.cpp
         SOURCES data/dto/conversations_dto.hpp
+        SOURCES domain/entity/messags.hpp
+        SOURCES domain/repository/message_repository.hpp
+        SOURCES data/dto/message_dto.hpp
+        SOURCES data/repository/message_repository_impl.hpp data/repository/message_repository_impl.cpp
+        SOURCES domain/usecase/message_usecase.hpp domain/usecase/message_usecase.cpp
 )
 
 target_include_directories(chat

@@ -3,10 +3,13 @@ pragma ComponentBehavior: Bound
 import QtQuick 2.15
 import QtQuick.Controls
 
+
 Item {
     id: body
 
-    property var model: null
+    property var model
+    property bool isVisible
+
     property bool selectionMode: false
     property int selectionRevision: 0
     property var selectionLookup: null
@@ -53,8 +56,15 @@ Item {
         id: listView
         anchors.fill: parent
         clip: true
+        visible: body.isVisible
 
-        anchors.topMargin: 8
+        // Keep short conversations at the bottom of the chat area. Unlike a
+        // BottomToTop ListView, this preserves the normal order of section
+        // headers (header first, then its messages).
+        anchors.topMargin: Math.max(
+            8,
+            body.height - contentHeight - bottomMargin
+        )
         bottomMargin: 20
 
         spacing: 2
@@ -96,6 +106,8 @@ Item {
 
         section.property: "section"
         section.criteria: ViewSection.FullString
+        section.labelPositioning: ViewSection.InlineLabels
+                                  | ViewSection.CurrentLabelAtStart
 
         section.delegate: Rectangle {
             required property string section
@@ -148,11 +160,18 @@ Item {
                 property var messageData
                 width: listView.width
                 isSeen: true
-                msg: messageData.msg
-                date: messageData.date
-                isOutgoing: messageData.sender_id === "1"
+                msg: messageData.body ?? ""
+                date: messageData.sentAt ?? ""
+                // isOutgoing: messageData.sender_id === "1"
             }
         }
+
+        verticalLayoutDirection: ListView.TopToBottom
+        Component.onCompleted: positionViewAtEnd()
+        onCountChanged: {
+            Qt.callLater(() => positionViewAtEnd())
+        }
+
 
         // =====================================================
         // ONE MouseArea controls selection for entire ListView
@@ -324,7 +343,7 @@ Item {
                          verticalScrollBar.active = true
                          scrollIndicatorTimer.restart()
                          wheel.accepted = true
-                     }
+                    }
         }
     }
 
@@ -341,7 +360,7 @@ Item {
             // more after that layout pass.
             Qt.callLater(() => {
                 listView.forceLayout()
-                listView.contentY = listView.maximumContentY
+                listView.positionViewAtEnd()
             })
         }
     }

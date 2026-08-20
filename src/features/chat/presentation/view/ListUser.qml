@@ -6,7 +6,7 @@ import QtQuick.Controls.Basic
 
 import Shared.UI
 import Theme
-import Features.Chat
+// import Features.Chat
 
 import "components" as Components
 
@@ -16,17 +16,20 @@ Item {
     property int itemHeight: 60
     property int padding: 0
     property bool isCompactMode: false
+    property var model
+
+
     signal expandRequested()
 
     property bool isSelected: false
 
     signal searchClicked()
-    signal itemClicked(int index)
+    signal itemClicked(int index, string userId)
 
 
-    Component.onCompleted: {
-        ConversationsVM.fetchConversations();
-    }
+    // Component.onCompleted: {
+    //     ConversationsVM.fetchConversations();
+    // }
 
     Pane {
         padding: 4
@@ -64,7 +67,7 @@ Item {
 
             ListView {
                 id: listUser
-                model: 10
+                model: root.model
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
@@ -72,18 +75,21 @@ Item {
                 spacing: 1
                 delegate: Components.ListUserItem {
                     required property int index
+                    required property var model
                     id: list
                     width: ListView.view.width
                     height: root.itemHeight
                     padding: root.padding
                     isCompactMode: root.isCompactMode
+                    username: model.name
 
                     isSelected: root.isSelected ? listUser.currentIndex === index : 0
 
                     onItemClicked: {
                         listUser.currentIndex = index
                         root.isSelected = true
-                        root.itemClicked(index)
+                        root.itemClicked(index, model.uuid)
+                        // console.log(model.uuid)
                     }
                 }
 

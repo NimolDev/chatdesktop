@@ -32,6 +32,7 @@ QFuture<QList<domain::entity::ConversationList>> ConversationsRepositoryImpl::fe
 
             if (!dto.has_value ()) {
                 qWarning() << "Conversation mapping error: "<<error;
+                return {};
             }
             QList<domain::entity::ConversationList> conversations = dto->toDomain ();
             qDebug() << "Conversation response:"<<conversations.size ();

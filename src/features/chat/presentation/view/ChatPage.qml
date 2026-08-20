@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 
 import Theme
+import Features.Chat
 
 Page {
     id: chatPage
@@ -12,6 +13,8 @@ Page {
     // anchors.fill: parent
 
     property bool isCollapsed: false
+
+    signal resetMessagingStateRequested
 
     function collapseUserList() {
         if (d.dragging)
@@ -31,7 +34,9 @@ Page {
             d.sidebarWidth = d.minimumExpandedWidth
         }
     }
-
+    Component.onCompleted: {
+        ConversationsVM.fetchConversations();
+    }
     QtObject {
         id: d
 
@@ -73,10 +78,16 @@ Page {
         itemHeight: d.userItemHeight
         padding: AppLayouts.s_padding
         isCompactMode: width < d.minimumExpandedWidth
+        model: ConversationsVM
         onExpandRequested: chatPage.expandUserList()
-        onItemClicked: function(index) {
-            console.log("Clicked: ", index)
+        onItemClicked: function(index, userId) {
+            chatPage.resetMessagingStateRequested()
             d.itemSelectedIndex = index
+            // console.log("User UUID:", userId)
+            MessagingViewModel.resetModel()
+            MessagingViewModel.fetchMessage(userId)
+
+
         }
     }
 
@@ -175,7 +186,18 @@ Page {
     Component {
         id: messagingList
         ListMessaging {
+            id: messagingView
+
             anchors.fill: parent
+            model: MessagingViewModel
+            isVisible: !MessagingViewModel.isLoading
+
+            Connections {
+                target: chatPage
+                function onResetMessagingStateRequested() {
+                    messagingView.resetState()
+                }
+            }
         }
     }
 }
