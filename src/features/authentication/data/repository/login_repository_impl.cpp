@@ -46,7 +46,6 @@ void LoginRepositoryImpl::login(domain::entity::LoginRequest  request)
      * Api response and connect to xmpp
      */
 
-
     m_request = data::mapping::toDto (request);
     QJsonObject body = core::network::JsonSerializer::toObject (m_request);
     m_network->post (core::constants::AppConstants::login (), body)

@@ -31,6 +31,7 @@ qt_add_qml_module(authentication
         SOURCES data/repository/session_repository_impl.hpp data/repository/session_repository_impl.cpp
         SOURCES domain/usecase/session_usecase.hpp domain/usecase/session_usecase.cpp
         SOURCES domain/usecase/logout_usecase.hpp domain/usecase/logout_usecase.cpp
+        SOURCES data/dto/refresh_token_response_dto.hpp
 )
 
 target_include_directories(authentication
@@ -52,6 +53,7 @@ target_link_libraries(authentication
         Qt6::Quick
         network
         xmpp
+        utils
         core::storage
         # localization
         # theme

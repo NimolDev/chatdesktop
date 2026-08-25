@@ -9,7 +9,9 @@ namespace usecase {
 class ConversationsUsecase
 {
 public:
-    explicit ConversationsUsecase(std::shared_ptr<domain::repository::ConversationListRepository> repository);
+    explicit ConversationsUsecase(
+        std::shared_ptr<domain::repository::ConversationListRepository> repository
+        );
 
     QFuture<QList<domain::entity::ConversationList>> execute();
 

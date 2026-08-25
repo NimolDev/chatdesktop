@@ -17,8 +17,13 @@ public:
 
     [[nodiscard]]
     static QString login();
-    static QString conversations();
-    static QString messages(const QString &user_id);
+    [[nodiscard]] static QString refreshToken();
+    [[nodiscard]] static QString conversations();
+    [[nodiscard]] static QString messages(const QString &user_id);
+    [[nodiscard]]static QString group();
+    [[nodiscard]]static QString groupMessage(const QString group_id);
+    [[nodiscard]] static QString saveMessages();
+
 
 };
 

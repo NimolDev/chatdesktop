@@ -33,8 +33,11 @@ public:
         std::shared_ptr<core::xmpp::XmppManager> xmpp,
         QObject *parent = nullptr
         );
+
     static AppController *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     static void setInstance(AppController *instance);
+
+    Q_PROPERTY(QString userName READ userName WRITE setUserName NOTIFY userNameChanged FINAL)
 
     AppState state() const;
 
@@ -45,10 +48,14 @@ public:
     Q_INVOKABLE void checkAuthentication();
     Q_INVOKABLE void logout();
 
+    QString userName();
+
+
 signals:
     void stateChanged();
     // void userNamed(QString &user_name);
     void userChanged(const QString &name);
+    void userNameChanged();
 
 
 private:
@@ -62,6 +69,9 @@ private:
     std::shared_ptr<core::xmpp::XmppManager> m_xmpp;
     // std::optional<auth::domain::User> m_user;
     static AppController *s_instance;
+
+    void setUserName(QString &user_name);
+    QString m_userName;
 
 };
 

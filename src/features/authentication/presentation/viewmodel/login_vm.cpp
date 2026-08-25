@@ -75,6 +75,8 @@ void LoginVM::login(const QString user_name, const QString password)
         user_name,
         password
     };
+    // m_userName = user_name;
+    m_userName = user_name;
     m_usecase ->execute (request);
 }
 

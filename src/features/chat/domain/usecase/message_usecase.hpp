@@ -1,19 +1,33 @@
 #ifndef FEATURES_CHAT_DOMAIN_USECASE_MESSAGE_USECASE_HPP
 #define FEATURES_CHAT_DOMAIN_USECASE_MESSAGE_USECASE_HPP
 
+#include <QObject>
+#include <QFutureWatcher>
+
 #include "repository/message_repository.hpp"
+
 
 namespace domain {
 namespace usecase {
 
-class MessageUsecase
+class MessageUsecase : public QObject
 {
+    Q_OBJECT
 public:
-   explicit MessageUsecase(std::shared_ptr<domain::repository::MessageRepository> repository);
+   explicit MessageUsecase(
+        std::shared_ptr<domain::repository::MessageRepository> repository,
+        QObject *parent = nullptr
+        );
 
-    QFuture<domain::entity::Message> execute(QString user_id);
+    QFuture<QList<domain::entity::Payload>> execute(QString user_id);
+
+signals:
+    void onMessagedReceived(const domain::entity::Payload &payload);
+    void messageSent(const domain::entity::Payload &payload);
+
 private:
     std::shared_ptr<domain::repository::MessageRepository> m_repository;
+    QString m_userListener;
 };
 
 

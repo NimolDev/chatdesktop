@@ -299,6 +299,11 @@ QString AppConstants::login()
     return getKey(generated::app_constants::kRegister);
 }
 
+QString AppConstants::refreshToken()
+{
+    return getKey(generated::app_constants::kRefrestToken);
+}
+
 QString AppConstants::conversations()
 {
     return getKey(generated::app_constants::kUsers);
@@ -306,10 +311,27 @@ QString AppConstants::conversations()
 
 QString AppConstants::messages(const QString &user_id)
 {
-    QString path = getKey(generated::app_constants::kMessagesByUser);
+    QString path = getKey(generated::app_constants::kMessages );
     const QString encoded_user_id = QString::fromUtf8(
         QUrl::toPercentEncoding(user_id.trimmed()));
     return path.replace(QStringLiteral("{userId}"), encoded_user_id);
+}
+
+QString AppConstants::group()
+{
+    return getKey(generated::app_constants::kGroups);
+}
+
+QString AppConstants::groupMessage(const QString group_id)
+{
+    QString path = getKey(generated::app_constants::kGroupsMessage);
+    const QString encoded_group_id = QString::fromUtf8 (QUrl::toPercentEncoding (group_id.trimmed ()));
+    return path.replace (QStringLiteral ("{groupId}"), encoded_group_id);
+}
+
+QString AppConstants::saveMessages()
+{
+    return getKey (generated::app_constants::kSaveMessages);
 }
 
 

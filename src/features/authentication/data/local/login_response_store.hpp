@@ -3,6 +3,7 @@
 
 #include "dto/local_user.hpp"
 #include "dto/login_response_dto.hpp"
+#include "dto/refresh_token_response_dto.hpp"
 
 #include <optional>
 
@@ -18,6 +19,7 @@ public:
         const QString password);
     [[nodiscard]] static std::optional<dto::LocalUser> getLocalUser();
     static bool logout();
+    static bool updateToken(dto::TokenResponseDto &token);
 };
 
 } // namespace local

@@ -24,7 +24,7 @@ Item {
     property bool isSelected: false
 
     signal searchClicked()
-    signal itemClicked(int index, string userId)
+    signal itemClicked(int index,string userName ,string userId)
 
 
     // Component.onCompleted: {
@@ -88,7 +88,7 @@ Item {
                     onItemClicked: {
                         listUser.currentIndex = index
                         root.isSelected = true
-                        root.itemClicked(index, model.uuid)
+                        root.itemClicked(index,model.name, model.uuid)
                         // console.log(model.uuid)
                     }
                 }

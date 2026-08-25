@@ -20,7 +20,7 @@ ApplicationWindow {
     minimumWidth: AppLayouts.minWidth
     minimumHeight: AppLayouts.minHeight
     visible: true
-    title:  AppStrings.appName
+    title: AppController.userName
 
     property bool lightMode: Application.styleHints.colorScheme === Qt.Light
     property color reallyDark: "#1f1f1f"
@@ -31,27 +31,31 @@ ApplicationWindow {
     menuBar:  Qt.platform.os === "osx" ? menuBar : null
 
     Component.onCompleted: AppController.checkAuthentication()
+
     Connections {
         target: AppController
         function onStateChanged() {
             var state = AppController.state
             switch(AppController.state ) {
             case AppController.Unauthenticated:
-                stackLayout.currentIndex = 0
+                 pageLoader.sourceComponent = loginPage
                 break
             case AppController.Logout:
-                stackLayout.currentIndex = 0
+                 pageLoader.sourceComponent = loginPage
                 break
             default:
-                stackLayout.currentIndex = 1
+                pageLoader.sourceComponent = chatPage
+
                 break
             }
         }
     }
+
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
-            stackLayout.currentIndex = 1
+            pageLoader.sourceComponent = chatPage
+            window.title = LoginVM.userName
         }
     }
 
@@ -125,11 +129,13 @@ ApplicationWindow {
     }
 
 
-    StackLayout {
-        id: stackLayout
+    Loader {
+        id: pageLoader
         anchors.fill: parent
-        currentIndex: 0
+    }
 
+    Component {
+        id: loginPage
         LoginView {
             implicitWidth: 200
             implicitHeight: 200
@@ -137,18 +143,19 @@ ApplicationWindow {
                 window.title = userName
             }
         }
+    }
+    Component {
+        id: chatPage
 
         AppComponent.Menu {
-
+            visible: pageLoader.sourceComponent == chatPage ? true : false
             onLogoutClicked: {
-
                 AppController.logout()
-                stackLayout.currentIndex = 0
+                pageLoader.sourceComponent = loginPage
+                window.title = AppStrings.login
             }
         }
-
-   }
-
+    }
 
 
 }

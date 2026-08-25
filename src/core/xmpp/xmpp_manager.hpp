@@ -1,13 +1,15 @@
 #ifndef CORE_XMPP_XMPP_MANAGER_HPP
 #define CORE_XMPP_XMPP_MANAGER_HPP
 
-#include "QXmppRosterManager.h"
+
 #include "xmpp_service_discovery.hpp"
+
 #include <QObject>
 #include <QString>
 #include <QXmppPresence.h>
 #include <QXmppClient.h>
 #include <QXmppMessage.h>
+#include <QXmppRosterManager.h>
 
 #include <optional>
 
@@ -55,7 +57,7 @@ struct Presence
 
 // };
 
-class XmppManager final: public QObject
+class XmppManager final : public QObject
 {
   Q_OBJECT
 public:
@@ -86,6 +88,9 @@ public:
         quint16 port
         );
     void closeConnection();
+    void sendMessage(
+        const QString &receiver_id,
+        const QString &message);
 
 signals:
     void connectionStateChanged();

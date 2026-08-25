@@ -9,7 +9,7 @@
 // #include "domain/messaging.hpp"
 #include "domain/entity/messags.hpp"
 #include "domain/usecase/message_usecase.hpp"
-
+#include "domain/usecase/send_message_usecase.hpp"
 
 
 class MessagingViewModel : public QAbstractListModel
@@ -20,6 +20,7 @@ class MessagingViewModel : public QAbstractListModel
 public:
     enum Roles {
         IdRole = Qt::UserRole + 1,
+        IsMineRole,
         SenderIdRole,
         RecipientIdRole,
         BodyRole,
@@ -28,6 +29,7 @@ public:
     };
     explicit MessagingViewModel(
         std::shared_ptr<domain::usecase::MessageUsecase> usecase,
+        std::shared_ptr<domain::usecase::SendMessageUsecase> msg_usecase,
         QObject *parent = nullptr
         );
 
@@ -39,6 +41,8 @@ public:
 
     Q_INVOKABLE void fetchMessage(QString user_id);
     Q_INVOKABLE void resetModel();
+    Q_INVOKABLE void sendMessage(const QString &receiver_id, const QString &msg);
+    Q_INVOKABLE void deleteMessage(QList<int> rows);
 
 
 
@@ -50,23 +54,32 @@ public:
     bool isLoading() const;
 
 
-
 signals:
     void isLoadingChanged();
+    void messageChanged();
 
 private:
     void onFinished();
     QString sectionForDate(const QString &sentAt) const;
     void setIsLoading(bool loading);
+    void insertMessage(const domain::entity::Payload &payload);
+    void messageMapping(const domain::entity::Payload &payload);
+
+
 private:
 
     static MessagingViewModel *s_instance;
 
     std::shared_ptr<domain::usecase::MessageUsecase> m_usecase;
-    domain::entity::Message m_message;
+    std::shared_ptr<domain::usecase::SendMessageUsecase> m_msgUsecase;
+    QList<domain::entity::Payload> m_message;
 
-    QFutureWatcher<domain::entity::Message> m_watcher;
+    QFutureWatcher<QList<domain::entity::Payload>> m_watcher;
+
+
+private:
     bool m_loading;
+
 };
 
 #endif // FEATURES_CHAT_PRESENTATION_VIEWMODEL_MESSAGING_VIEW_MODEL_HPP

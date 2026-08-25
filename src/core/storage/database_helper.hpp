@@ -10,11 +10,13 @@
 
 namespace core {
 namespace storage {
+
 class DatabaseHelper
 {
 public:
 
     static QSqlQuery getUserQuery();
+    static QSqlQuery getCurrentUser();
 
 
 };

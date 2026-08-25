@@ -1,5 +1,4 @@
 #include "app_container.hpp"
-
 #include "app_controller.hpp"
 
 #include "constants/app_constants.hpp"
@@ -21,6 +20,7 @@
 #include "chat/data/repository/message_repository_impl.hpp"
 #include "chat/domain/usecase/message_usecase.hpp"
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
+#include "chat/presentation/viewmodel/home_chat_vm.hpp"
 
 AppContainer::AppContainer(QQmlApplicationEngine *engine)
     : m_engine(engine)
@@ -60,7 +60,10 @@ void AppContainer::registerCoreService()
 void AppContainer::registerAppController()
 {
     m_container.registerFactory<domain::repository::SessionRepository> ([](ServiceContainer &c) {
-        return std::make_shared<data::repository::SessionRepositoryImpl> (c.resolve<core::xmpp::XmppManager> ());
+        return std::make_shared<data::repository::SessionRepositoryImpl> (
+            c.resolve<core::xmpp::XmppManager> (),
+            c.resolve<core::network::NetworkClient> ()
+            );
     });
     m_container.registerFactory<domain::usecase::SessionUsecase> ([](ServiceContainer &c) {
         return std::make_shared<domain::usecase::SessionUsecase> (c.resolve<domain::repository::SessionRepository> ());
@@ -103,14 +106,23 @@ void AppContainer::registerAuthentication()
 
 void AppContainer::registerChat()
 {
-    m_container.registerFactory<domain::repository::MessageRepository> ([](ServiceContainer &c) {
-        return std::make_shared<data::repository::MessageRepositoryImpl> (c.resolve<core::network::NetworkClient> ());
+    m_container.registerSingleton<domain::repository::MessageRepository> ([](ServiceContainer &c) {
+        return std::make_shared<data::repository::MessageRepositoryImpl> (
+            c.resolve<core::xmpp::XmppManager> (),
+            c.resolve<core::network::NetworkClient> ()
+            );
     });
     m_container.registerFactory<domain::usecase::MessageUsecase> ([](ServiceContainer &c) {
         return std::make_shared<domain::usecase::MessageUsecase> (c.resolve<domain::repository::MessageRepository> ());
     });
+    m_container.registerFactory<domain::usecase::SendMessageUsecase> ([](ServiceContainer &c) {
+        return std::make_shared<domain::usecase::SendMessageUsecase> (c.resolve<domain::repository::MessageRepository> ());
+    });
     m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
-        return  std::make_shared<MessagingViewModel> (c.resolve<domain::usecase::MessageUsecase> ());
+        return  std::make_shared<MessagingViewModel> (
+            c.resolve<domain::usecase::MessageUsecase> (),
+            c.resolve<domain::usecase::SendMessageUsecase> ()
+            );
     });
     MessagingViewModel::setInstance (m_container.resolve<MessagingViewModel> ().get ());
 
@@ -124,5 +136,10 @@ void AppContainer::registerChat()
         return std::make_shared<ConversationsVM> (c.resolve<domain::usecase::ConversationsUsecase> ());
     });
     ConversationsVM::setInstance (m_container.resolve<ConversationsVM> ().get ());
+
+    m_container.registerSingleton<HomeChatVM> ([](ServiceContainer &c) {
+        return std::make_shared<HomeChatVM> (c.resolve<domain::repository::MessageRepository> ());
+    });
+    HomeChatVM::setInstance (m_container.resolve<HomeChatVM> ().get ());
 
 }

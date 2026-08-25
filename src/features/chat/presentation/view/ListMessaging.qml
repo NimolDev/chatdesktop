@@ -30,7 +30,7 @@ Item {
     signal videoRequested
     signal moreRequested
     signal forwardSelectedRequested
-    signal deleteSelectedRequested
+    signal deleteSelectedRequested(var rows)
 
     function isMessageSelected(messageIndex) {
         return selectedMessages[messageIndex] === true;
@@ -67,12 +67,15 @@ Item {
                 Window.window.width -= rigthSideContainer.width;
         }
     }
+    function scrollMessageToLast() {
+        messageBody.scrollToLatest()
+    }
 
     Connections {
         target: root.Window.window
         function onWidthChanged() {
-            console.log("Width changed", root.Window.window.width);
-            console.log("Min: ", AppLayouts.minWidth + rigthSideContainer.width);
+            // console.log("Width changed", root.Window.window.width);
+            // console.log("Min: ", AppLayouts.minWidth + rigthSideContainer.width);
             if (root.Window.window.width <= AppLayouts.minWidth + rigthSideContainer.width && root.isShowEmojiSide) {
                 root.isShowEmojiSide = false;
                 // Window.window.width -= emojiSide.width
@@ -106,7 +109,14 @@ Item {
         onVideoClicked: root.videoRequested()
         onMoreClicked: root.moreRequested()
         onForwardClicked: root.forwardSelectedRequested()
-        onDeleteClicked: root.deleteSelectedRequested()
+        onDeleteClicked: {
+            const indexes = Object.keys(root.selectedMessages)
+            .filter(key => root.selectedMessages[key])
+            .map(Number)
+            .sort((a, b) => b - a);
+            root.deleteSelectedRequested(indexes);
+            root.clearSelection()
+        }
         onCancelClicked: root.clearSelection()
     }
 
@@ -135,6 +145,8 @@ Item {
             const position = messageBody.mapToItem(messageMenu.parent, mouseX, mouseY);
             messageMenu.showForMessage(index, selectOnly, position);
         }
+
+
     }
 
     Components.MessageComposer {

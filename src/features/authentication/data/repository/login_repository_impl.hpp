@@ -23,6 +23,7 @@ public:
         QObject *parent = nullptr
         );
 
+
 public:
     void login(domain::entity::LoginRequest request) override;
     void connectToXmpp() override;

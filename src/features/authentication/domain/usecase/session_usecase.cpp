@@ -20,8 +20,9 @@ SessionUsecase::SessionUsecase(
 
 void SessionUsecase::execute()
 {
-   bool isSession = m_repository ->sessionChecked ();
-   emit sessionChanged (isSession);
+    m_repository->sessionChecked().then(this, [this](bool isSession) {
+        emit sessionChanged(isSession);
+    });
 }
 
 

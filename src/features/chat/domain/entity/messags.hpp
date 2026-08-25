@@ -9,11 +9,13 @@ namespace entity {
 
 struct Item
 {
+    bool is_mine = false;
     QString id;
     QString sender_id;
     QString recipient_id;
     QString body;
     QString sent_at;
+
 };
 
 struct Message

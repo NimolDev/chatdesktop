@@ -43,11 +43,12 @@ QString formateConversationDate(const QString epoch_string)
     qint64 epoch = epoch_string.toLongLong (&ok);
     if (!ok)  return QStringLiteral ("N/A");
 
-    QDateTime dt = QDateTime::fromMSecsSinceEpoch (epoch).toLocalTime ();
+    QDateTime dt = QDateTime::fromSecsSinceEpoch (epoch).toLocalTime ();
     QDate today = QDate::currentDate ();
 
     if (dt.date () == today) {
         return dt.toString ("hh:mm AP");
+        // return "Today";
     }
     if (dt.date () == today.addDays (-1)) {
         return "Yesterday";

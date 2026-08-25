@@ -48,6 +48,12 @@ qt_add_qml_module(chat
         SOURCES data/dto/message_dto.hpp
         SOURCES data/repository/message_repository_impl.hpp data/repository/message_repository_impl.cpp
         SOURCES domain/usecase/message_usecase.hpp domain/usecase/message_usecase.cpp
+        SOURCES domain/entity/messag_payload.hpp
+        SOURCES domain/usecase/send_message_usecase.hpp domain/usecase/send_message_usecase.cpp
+        SOURCES data/dto/message_payload_dto.hpp
+        SOURCES data/mapping/message_payload_mapper.hpp
+        SOURCES presentation/viewmodel/home_chat_vm.hpp presentation/viewmodel/home_chat_vm.cpp
+        SOURCES data/dto/message_store.hpp
 )
 
 target_include_directories(chat
@@ -66,7 +72,7 @@ target_link_libraries(chat
         Qt6::Quick
         network
         constants
-        # xmpp
+        xmpp
         # localization
         # theme
 )

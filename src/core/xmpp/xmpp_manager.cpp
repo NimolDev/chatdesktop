@@ -1,5 +1,5 @@
 #include "xmpp_manager.hpp"
-#include "QXmppRosterManager.h"
+
 
 #include <QTimer>
 #include <QUuid>
@@ -111,6 +111,29 @@ void XmppManager::closeConnection()
     presence.setStatusText(QStringLiteral("Offline"));
     m_client.setClientPresence(presence);
     m_client.disconnectFromServer();
+}
+
+void XmppManager::sendMessage(const QString &receiver_id, const QString &message)
+{
+    if (m_client.state () != QXmppClient::ConnectedState) {
+        qWarning() << "XMPP Client is not connected";
+        return;
+    }
+    const QString body = message.trimmed ();
+
+    if (receiver_id.isEmpty () || body.isEmpty ()) {
+        return;
+    }
+    const QString receiver_jid = receiver_id + "@localhost";
+    QXmppMessage msg;
+    msg.setTo (receiver_jid);
+    msg.setBody (body);
+    msg.setType (QXmppMessage::Chat);
+    msg.setId (QUuid::createUuid ().toString (QUuid::WithoutBraces));
+    // QXmppStanza stanza;
+
+    m_client.send (std::move (msg));
+
 }
 
 
@@ -258,13 +281,10 @@ void XmppManager::initializeSignals()
         );
 
 
-
-
-
-    // auto *logger = m_client.logger();
+    auto *logger = m_client.logger();
 
     // logger->setLoggingType(QXmppLogger::StdoutLogging);
-    // logger->setMessageTypes(QXmppLogger::AnyMessage);
+    logger->setMessageTypes(QXmppLogger::AnyMessage);
 }
 
 
@@ -303,7 +323,6 @@ void XmppManager::onIQReceived(const QXmppIq &iq)
         qDebug() << "Value:" << extension.value();
     }
 }
-
 
 
 QString XmppManager::lastError() const

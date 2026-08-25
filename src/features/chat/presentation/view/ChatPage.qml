@@ -8,35 +8,49 @@ import Features.Chat
 Page {
     id: chatPage
 
+    visible: false
     implicitHeight: AppLayouts.minWidth
     implicitWidth: AppLayouts.minWidth
     // anchors.fill: parent
 
     property bool isCollapsed: false
+    property string receiverId
+    property string selectUserName
 
     signal resetMessagingStateRequested
+    signal needScrollToLast
 
     function collapseUserList() {
         if (d.dragging)
-            return
-
-        isCollapsed = true
-        d.sidebarWidth = d.collapsedWidth
+            return;
+        isCollapsed = true;
+        d.sidebarWidth = d.collapsedWidth;
     }
 
     function expandUserList() {
         if (d.dragging)
-            return
-
-        isCollapsed = false
-        d.sidebarWidth = Math.min(d.expandedWidth, d.maximumSidebarWidth)
-        if (d.sidebarWidth < 200 ) {
-            d.sidebarWidth = d.minimumExpandedWidth
+            return;
+        isCollapsed = false;
+        d.sidebarWidth = Math.min(d.expandedWidth, d.maximumSidebarWidth);
+        if (d.sidebarWidth < 200) {
+            d.sidebarWidth = d.minimumExpandedWidth;
         }
     }
-    Component.onCompleted: {
-        ConversationsVM.fetchConversations();
+
+    onVisibleChanged: {
+        if (visible) {
+            console.log("ChatPage Visible");
+            ConversationsVM.fetchConversations();
+        }
     }
+
+    Connections {
+        target: MessagingViewModel
+        function onMessageChanged() {
+            chatPage.needScrollToLast()
+        }
+    }
+
     QtObject {
         id: d
 
@@ -46,9 +60,7 @@ Page {
         readonly property int collapseThreshold: minimumExpandedWidth
         readonly property int expandPullDistance: 30
         readonly property int messageMinimumWidth: 300
-        readonly property int maximumSidebarWidth: Math.max(
-                                                       minimumExpandedWidth,
-                                                       chatPage.width - messageMinimumWidth)
+        readonly property int maximumSidebarWidth: Math.max(minimumExpandedWidth, chatPage.width - messageMinimumWidth)
 
         property real sidebarWidth: minimumExpandedWidth
         property real expandedWidth: minimumExpandedWidth
@@ -80,14 +92,14 @@ Page {
         isCompactMode: width < d.minimumExpandedWidth
         model: ConversationsVM
         onExpandRequested: chatPage.expandUserList()
-        onItemClicked: function(index, userId) {
-            chatPage.resetMessagingStateRequested()
-            d.itemSelectedIndex = index
+        onItemClicked: function (index, userName, userId) {
+            chatPage.resetMessagingStateRequested();
+            d.itemSelectedIndex = index;
             // console.log("User UUID:", userId)
-            MessagingViewModel.resetModel()
-            MessagingViewModel.fetchMessage(userId)
-
-
+            chatPage.receiverId = userId;
+            chatPage.selectUserName = userName
+            MessagingViewModel.resetModel();
+            MessagingViewModel.fetchMessage(userId);
         }
     }
 
@@ -99,11 +111,12 @@ Page {
         anchors.bottom: parent.bottom
         x: d.sidebarWidth
         width: 1
-        color: handleMouseArea.containsMouse || handleMouseArea.pressed
-               ? Colors.primary : Colors.primary600
+        color: handleMouseArea.containsMouse || handleMouseArea.pressed ? Colors.primary : Colors.primary600
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            ColorAnimation {
+                duration: 150
+            }
         }
 
         MouseArea {
@@ -115,54 +128,48 @@ Page {
             hoverEnabled: true
             cursorShape: Qt.SizeHorCursor
 
-            onPressed: (mouse) => {
-                d.dragging = true
-                d.dragStartedCollapsed = chatPage.isCollapsed
-                d.pressSceneX = splitHandle.mapToItem(chatPage, mouse.x, mouse.y).x
-                d.pressWidth = d.sidebarWidth
+            onPressed: mouse => {
+                d.dragging = true;
+                d.dragStartedCollapsed = chatPage.isCollapsed;
+                d.pressSceneX = splitHandle.mapToItem(chatPage, mouse.x, mouse.y).x;
+                d.pressWidth = d.sidebarWidth;
             }
 
-            onPositionChanged: (mouse) => {
+            onPositionChanged: mouse => {
                 if (!pressed)
-                    return
-
-                const sceneX = splitHandle.mapToItem(chatPage, mouse.x, mouse.y).x
-                const requestedWidth = d.pressWidth + sceneX - d.pressSceneX
-                d.sidebarWidth = Math.max(
-                            d.collapsedWidth,
-                            Math.min(requestedWidth, d.maximumSidebarWidth))
+                    return;
+                const sceneX = splitHandle.mapToItem(chatPage, mouse.x, mouse.y).x;
+                const requestedWidth = d.pressWidth + sceneX - d.pressSceneX;
+                d.sidebarWidth = Math.max(d.collapsedWidth, Math.min(requestedWidth, d.maximumSidebarWidth));
             }
 
             onReleased: {
-                d.dragging = false
+                d.dragging = false;
 
-                const expandPullReached = d.dragStartedCollapsed
-                        && d.sidebarWidth - d.pressWidth >= d.expandPullDistance
+                const expandPullReached = d.dragStartedCollapsed && d.sidebarWidth - d.pressWidth >= d.expandPullDistance;
 
                 if (expandPullReached) {
-                    chatPage.isCollapsed = false
-                    d.sidebarWidth = Math.max(d.minimumExpandedWidth,
-                                              d.sidebarWidth)
-                    d.expandedWidth = d.sidebarWidth
+                    chatPage.isCollapsed = false;
+                    d.sidebarWidth = Math.max(d.minimumExpandedWidth, d.sidebarWidth);
+                    d.expandedWidth = d.sidebarWidth;
                 } else if (d.sidebarWidth < d.collapseThreshold) {
-                    chatPage.isCollapsed = true
-                    d.sidebarWidth = d.collapsedWidth
+                    chatPage.isCollapsed = true;
+                    d.sidebarWidth = d.collapsedWidth;
                 } else {
-                    chatPage.isCollapsed = false
-                    d.expandedWidth = d.sidebarWidth
+                    chatPage.isCollapsed = false;
+                    d.expandedWidth = d.sidebarWidth;
                 }
             }
 
             onCanceled: {
-                d.dragging = false
-                d.sidebarWidth = chatPage.isCollapsed
-                        ? d.collapsedWidth : d.expandedWidth
+                d.dragging = false;
+                d.sidebarWidth = chatPage.isCollapsed ? d.collapsedWidth : d.expandedWidth;
             }
         }
     }
     onWidthChanged: {
         if (!d.dragging && d.sidebarWidth > d.maximumSidebarWidth)
-            d.sidebarWidth = d.maximumSidebarWidth
+            d.sidebarWidth = d.maximumSidebarWidth;
     }
 
     // -- Messaging Loader
@@ -190,14 +197,27 @@ Page {
 
             anchors.fill: parent
             model: MessagingViewModel
+            userName: chatPage.selectUserName
             isVisible: !MessagingViewModel.isLoading
+            onMessageSubmitted: msg => {
+                MessagingViewModel.sendMessage(chatPage.receiverId, msg);
+            }
+            onDeleteSelectedRequested:(indexes) => {
+                                          console.log("Delete Message",indexes);
+                                          MessagingViewModel.deleteMessage(indexes)
+                                      }
 
             Connections {
                 target: chatPage
                 function onResetMessagingStateRequested() {
-                    messagingView.resetState()
+                    messagingView.resetState();
+                }
+                function onNeedScrollToLast() {
+                    console.log("Message changed")
+                    messagingView.scrollMessageToLast();
                 }
             }
+
         }
     }
 }

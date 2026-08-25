@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick 2.15
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
@@ -6,20 +8,19 @@ import Shared.UI
 import Theme
 import Localization
 
-import Features.Auth
 import Features.Chat
 
 Page {
     id: root
     implicitHeight: 480
     implicitWidth: 730
-    // anchors.fill: parent
+    visible: false
 
     property bool isCompactMode: width <= AppLayouts.minWidth
     readonly property int _padding: 8
     readonly property int _menuHeight: 40
 
-    property int selectedIndex:  1
+    property int selectedIndex:  -1
     signal logoutClicked()
 
     background: Rectangle {
@@ -30,6 +31,18 @@ Page {
         txtUserName.visible = !isCompactMode
         txtUserNumber.visible = !isCompactMode
     }
+    onVisibleChanged: {
+        if (visible) {
+            selectedIndex = 1
+        }
+    }
+    onSelectedIndexChanged: {
+        switch(selectedIndex){
+        case 1:
+            tabLoader.sourceComponent = chatPage
+            HomeChatVM.visible = true
+        }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -38,7 +51,9 @@ Page {
         // --- Side Menu ----
         Rectangle {
             id: sideMenu
-            Layout.preferredWidth: root.isCompactMode ? (root._padding*2 + root._menuHeight) : 150
+            Layout.preferredWidth: root.isCompactMode ?
+                                       (root._padding*2 + root._menuHeight)
+                                     : 150
             Layout.fillHeight: true
             color: Colors.background
             // Behavior on Layout.preferredWidth {
@@ -118,7 +133,10 @@ Page {
                         menuIcon: AppAssets.icChat
                         ButtonGroup.group: menuGroup
                         isCompactMode: root.isCompactMode
-                       onClicked: root.selectedIndex = 1
+                        onClicked: {
+                           root.selectedIndex = 1
+                            // chat.visible = root.selectedIndex == 1
+                        }
                     }
                     MenuButton {
                         Layout.preferredHeight: root._menuHeight
@@ -260,28 +278,25 @@ Page {
 
         // --- Loader ----
         Loader {
-          id: loader
+          id: tabLoader
           Layout.fillWidth: true
           Layout.fillHeight: true
-          sourceComponent: switch (root.selectedIndex) {
-                           case 1: return chatPage
-
-                           }
+          // sourceComponent: switch (root.selectedIndex) {
+          //                  case 1:
+          //                      // chatPage.visible = false
+          //                      // HomeChatVM.visible = true
+          //                      return chatPage
+          //                  }
         }
     }
 
-    // Page Component
-    Component {
-        id: auth
-        LoginView {
-            anchors.fill: parent
-        }
-    }
     Component {
         id: chatPage
         ChatPage {
+            visible: tabLoader.sourceComponent === chatPage
             anchors.fill: parent
         }
+
     }
 
 

@@ -101,7 +101,6 @@ bool LoginResponseStore::save(
         database.rollback();
         return false;
     }
-
     return true;
 }
 
@@ -165,6 +164,35 @@ bool LoginResponseStore::logout()
      )"));
     if (!query.exec()) {
         logQueryError("Getting local user", query);
+        return false;
+    }
+
+    return true;
+}
+
+bool LoginResponseStore::updateToken(dto::TokenResponseDto &token)
+{
+    QSqlDatabase database = QSqlDatabase::database(
+        core::storage::DatabaseManager::connectionName(),
+        false);
+
+    if (!database.isValid() || !database.isOpen()) {
+        qWarning() << "Cannot get local user: local database is not open";
+        return false;
+    }
+
+    QSqlQuery query(database);
+    query.prepare (QStringLiteral (R"(
+        UPDATE users
+        SET access_token = ?,
+            refresh_token = ?
+        WHERE logged = 1
+     )"));
+    query.addBindValue (token.access_token);
+    query.addBindValue (token.refresh_token);
+
+    if (!query.exec()) {
+        logQueryError("Update user error:", query);
         return false;
     }
 

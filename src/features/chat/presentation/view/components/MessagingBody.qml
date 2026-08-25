@@ -3,17 +3,20 @@ pragma ComponentBehavior: Bound
 import QtQuick 2.15
 import QtQuick.Controls
 
+import Theme
 
 Item {
     id: body
 
     property var model
+
     property bool isVisible
 
     property bool selectionMode: false
     property int selectionRevision: 0
     property var selectionLookup: null
     property bool contextMenuOpen: false
+
     readonly property alias dragSelecting: listView.dragSelecting
 
     signal selectionRequested(int messageIndex, bool selected)
@@ -38,8 +41,10 @@ Item {
     }
 
     function scrollToLatest() {
-        if (listView.count > 0)
+        if (listView.count > 0) {
+            listView.scrollAttemptsRemaining = 6
             scrollToLatestTimer.restart()
+        }
     }
 
     Image {
@@ -69,7 +74,6 @@ Item {
 
         spacing: 2
         model: body.model
-
         interactive: false
 
         ScrollBar.vertical: ScrollBar {
@@ -87,6 +91,7 @@ Item {
 
         property bool dragSelecting: false
         property bool dragSelectValue: true
+        property int scrollAttemptsRemaining: 0
         readonly property real minimumContentY: originY
         readonly property real maximumContentY: Math.max(
             minimumContentY,
@@ -110,17 +115,29 @@ Item {
                                   | ViewSection.CurrentLabelAtStart
 
         section.delegate: Rectangle {
+            id: header
             required property string section
 
             width: listView.width
             height: 35
             color: "transparent"
 
-            Text {
+            Rectangle {
+                color: Colors.suface1
+                implicitWidth: txtText.implicitWidth + AppLayouts.x_padding*2
+                implicitHeight: txtText.implicitHeight + AppLayouts.m_padding*2
                 anchors.centerIn: parent
-                text: parent.section
-                color: "white"
-                font.bold: true
+                radius: width/2
+                border.color: Colors.suface3
+                Text {
+                    id: txtText
+                    anchors.centerIn: parent
+                    text: header.section
+                    color: "white"
+                    font.bold: true
+                    // padding: AppLayouts.x_padding
+
+                }
             }
         }
 
@@ -160,16 +177,39 @@ Item {
                 property var messageData
                 width: listView.width
                 isSeen: true
-                msg: messageData.body ?? ""
-                date: messageData.sentAt ?? ""
-                // isOutgoing: messageData.sender_id === "1"
+                // A Loader creates this item before onLoaded assigns the
+                // delegate's model object. Keep the initial binding
+                // evaluation (and model resets) safe while it is null.
+                msg: messageData ? messageData.body : ""
+                date: messageData ? messageData.sentAt : ""
+                isOutgoing: messageData
+                            ? Boolean(messageData.isMine) : false
             }
         }
 
         verticalLayoutDirection: ListView.TopToBottom
-        Component.onCompleted: positionViewAtEnd()
-        onCountChanged: {
-            Qt.callLater(() => positionViewAtEnd())
+        Component.onCompleted: body.scrollToLatest()
+        onCountChanged: body.scrollToLatest()
+        onVisibleChanged: {
+            if (visible)
+                body.scrollToLatest()
+        }
+
+        remove: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "opacity"
+                    from: 1
+                    to: 0
+                    duration: 180
+                }
+                NumberAnimation {
+                    property: "x"
+                    to: 100
+                    duration: 180
+                    easing.type: Easing.InCubic
+                }
+            }
         }
 
 
@@ -350,18 +390,22 @@ Item {
     Timer {
         id: scrollToLatestTimer
 
-        interval: 0
+        interval: 16
+        repeat: true
         onTriggered: {
+            if (!listView.visible || listView.count === 0) {
+                stop()
+                return
+            }
+
             listView.forceLayout()
+            listView.currentIndex = listView.count - 1
+            listView.positionViewAtIndex(listView.count - 1, ListView.End)
             listView.positionViewAtEnd()
 
-            // positionViewAtEnd() runs before every pending delegate and
-            // composer resize is polished. Apply the final bound once
-            // more after that layout pass.
-            Qt.callLater(() => {
-                listView.forceLayout()
-                listView.positionViewAtEnd()
-            })
+            --listView.scrollAttemptsRemaining
+            if (listView.scrollAttemptsRemaining <= 0)
+                stop()
         }
     }
 
