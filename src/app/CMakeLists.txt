@@ -91,6 +91,17 @@ target_link_libraries(ChatApp
         chat
 )
 
+if(WIN32)
+    # windeployqt handles Qt's own DLLs, but not third-party runtime DLLs.
+    deploy_bundled_openssl_runtime(ChatApp)
+    add_custom_command(TARGET ChatApp POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:QXmppQt6>"
+            "$<TARGET_FILE_DIR:ChatApp>"
+        VERBATIM
+    )
+endif()
+
 
 install(TARGETS ChatApp
     BUNDLE DESTINATION .
