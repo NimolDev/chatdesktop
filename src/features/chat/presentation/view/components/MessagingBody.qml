@@ -42,7 +42,6 @@ Item {
 
     function scrollToLatest() {
         if (listView.count > 0) {
-            listView.scrollAttemptsRemaining = 6
             scrollToLatestTimer.restart()
         }
     }
@@ -61,18 +60,25 @@ Item {
         id: listView
         anchors.fill: parent
         clip: true
-        visible: body.isVisible
+        visible: true
 
         // Keep short conversations at the bottom of the chat area. Unlike a
         // BottomToTop ListView, this preserves the normal order of section
         // headers (header first, then its messages).
         anchors.topMargin: Math.max(
-            8,
+            0,
             body.height - contentHeight - bottomMargin
         )
-        bottomMargin: 20
+        // bottomMargin: 20
+        footer: Item {
+                width: listView.width
+                height: 16
+            }
+
 
         spacing: 2
+        // Keep the outgoing conversation rendered while the next one loads.
+        // ChatPage freezes it into a transition layer before this model resets.
         model: body.model
         interactive: false
 
@@ -91,7 +97,6 @@ Item {
 
         property bool dragSelecting: false
         property bool dragSelectValue: true
-        property int scrollAttemptsRemaining: 0
         readonly property real minimumContentY: originY
         readonly property real maximumContentY: Math.max(
             minimumContentY,
@@ -145,72 +150,61 @@ Item {
         // Message delegate
         // -------------------------
 
-        delegate: Loader {
+         delegate: MessageBubble {
             id: messageDelegate
-
             required property var model
             required property int index
+            readonly property int messageIndex: index
 
             width: ListView.view.width
 
-            property bool selected: body.isMessageSelected(index)
-            property int messageIndex: index
+            selected: body.isMessageSelected(index)
+            selectionMode: body.selectionMode
+            isSeen: true
+             // A Loader creates this item before onLoaded assigns the
+             // delegate's model object. Keep the initial binding
+             // evaluation (and model resets) safe while it is null.
+            msg: model ? model.body : ""
+            date: model ? model.sentAt : ""
+            isOutgoing: model ? model.isMine : false
+         }
 
-            sourceComponent: textMessaging
-            property Item bubbleItem: item ? item.bubbleItem : null
-
-            onLoaded: {
-                item.messageData = model
-                item.selected = Qt.binding(
-                    () => messageDelegate.selected
-                )
-                item.selectionMode = Qt.binding(
-                    () => body.selectionMode
-                )
-            }
-        }
-
-        Component {
-            id: textMessaging
-
-            MessageBubble {
-                property var messageData
-                width: listView.width
-                isSeen: true
-                // A Loader creates this item before onLoaded assigns the
-                // delegate's model object. Keep the initial binding
-                // evaluation (and model resets) safe while it is null.
-                msg: messageData ? messageData.body : ""
-                date: messageData ? messageData.sentAt : ""
-                isOutgoing: messageData
-                            ? Boolean(messageData.isMine) : false
-            }
-        }
 
         verticalLayoutDirection: ListView.TopToBottom
-        Component.onCompleted: body.scrollToLatest()
-        onCountChanged: body.scrollToLatest()
+        Component.onCompleted: {
+            body.scrollToLatest()
+        }
+        onCountChanged: {
+            Qt.callLater(() =>  {
+                             body.scrollToLatest()
+                             // listView.positionViewAtEnd()
+                         })
+        }
         onVisibleChanged: {
             if (visible)
                 body.scrollToLatest()
         }
 
-        remove: Transition {
-            ParallelAnimation {
-                NumberAnimation {
-                    property: "opacity"
-                    from: 1
-                    to: 0
-                    duration: 180
-                }
-                NumberAnimation {
-                    property: "x"
-                    to: 100
-                    duration: 180
-                    easing.type: Easing.InCubic
-                }
-            }
-        }
+        // remove: Transition {
+        //     // Conversation switches set isVisible=false before clearing the
+        //     // model. Do not keep removed delegates alive for their exit
+        //     // animation, or they can overlap a fast-loading conversation.
+        //     enabled: body.isVisible
+        //     ParallelAnimation {
+        //         NumberAnimation {
+        //             property: "opacity"
+        //             from: 1
+        //             to: 0
+        //             duration: 180
+        //         }
+        //         NumberAnimation {
+        //             property: "x"
+        //             to: 100
+        //             duration: 180
+        //             easing.type: Easing.InCubic
+        //         }
+        //     }
+        // }
 
 
         // =====================================================
@@ -256,9 +250,12 @@ Item {
 
                            var p = selectionArea.mapToItem(delegate.bubbleItem, mouse.x, mouse.y)
                            const selectOnly = !delegate.bubbleItem.contains(p)
+                           const bodyPosition = selectionArea.mapToItem(
+                               body, mouse.x, mouse.y)
                            body.contextMenuRequested(delegate.messageIndex,
                                                      selectOnly,
-                                                     mouse.x, mouse.y)
+                                                     bodyPosition.x,
+                                                     bodyPosition.y)
 
                        }
             onPressed: mouse => {
@@ -390,8 +387,8 @@ Item {
     Timer {
         id: scrollToLatestTimer
 
-        interval: 16
-        repeat: true
+        interval: 10
+        repeat: false
         onTriggered: {
             if (!listView.visible || listView.count === 0) {
                 stop()
@@ -400,12 +397,7 @@ Item {
 
             listView.forceLayout()
             listView.currentIndex = listView.count - 1
-            listView.positionViewAtIndex(listView.count - 1, ListView.End)
             listView.positionViewAtEnd()
-
-            --listView.scrollAttemptsRemaining
-            if (listView.scrollAttemptsRemaining <= 0)
-                stop()
         }
     }
 

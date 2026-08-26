@@ -5,9 +5,8 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
-#include <QFutureWatcher>
 // #include "domain/messaging.hpp"
-#include "domain/entity/messags.hpp"
+// #include "domain/entity/messags.hpp"
 #include "domain/usecase/message_usecase.hpp"
 #include "domain/usecase/send_message_usecase.hpp"
 
@@ -45,7 +44,6 @@ public:
     Q_INVOKABLE void deleteMessage(QList<int> rows);
 
 
-
 public:
     int rowCount(const QModelIndex &parent = QModelIndex ()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -59,8 +57,10 @@ signals:
     void messageChanged();
 
 private:
-    void onFinished();
+    void applyFetchedMessages(QList<domain::entity::Payload> messages,
+                              quint64 requestId);
     QString sectionForDate(const QString &sentAt) const;
+    static QString normalizedId(const QString &id);
     void setIsLoading(bool loading);
     void insertMessage(const domain::entity::Payload &payload);
     void messageMapping(const domain::entity::Payload &payload);
@@ -73,12 +73,15 @@ private:
     std::shared_ptr<domain::usecase::MessageUsecase> m_usecase;
     std::shared_ptr<domain::usecase::SendMessageUsecase> m_msgUsecase;
     QList<domain::entity::Payload> m_message;
+    QList<QString> m_displayDates;
+    QList<QString> m_sections;
 
-    QFutureWatcher<QList<domain::entity::Payload>> m_watcher;
+    QString m_activeConversationId;
+    quint64 m_fetchRequestId = 0;
 
 
 private:
-    bool m_loading;
+    bool m_loading = false;
 
 };
 

@@ -32,9 +32,11 @@ MessageRepositoryImpl::MessageRepositoryImpl(
 QFuture<QList<domain::entity::Payload>> MessageRepositoryImpl::fetchMessageById(QString user_id)
 {
     QUrlQuery query;
-    query.addQueryItem (QStringLiteral ("limit"), "1000000000000");
+    query.addQueryItem (QStringLiteral ("limit"), "100");
     return m_network ->get (core::constants::AppConstants::messages (user_id), query)
-        .then([this](const core::network::NetworkResponse &response) ->QList<domain::entity::Payload> {
+        .then(QtFuture::Launch::Async,
+              [](const core::network::NetworkResponse &response)
+                  -> QList<domain::entity::Payload> {
             if (!response.isSuccess ()) {
                 qWarning() << "Message request failed, status:"<<response.status_code;
                 return {};
@@ -55,7 +57,7 @@ QFuture<QList<domain::entity::Payload>> MessageRepositoryImpl::fetchMessageById(
              QList<domain::entity::Payload> payloads;
             for (const dto::Item &message : std::as_const (dto->messages)) {
                 data::dto::PayloadDto dto = data::dto::PayloadDto::fromJsonString (message.body);
-                qDebug() << "Message response: "<< dto.sender_id;
+                // qDebug() << "Message response: "<< dto.sender_id;
                 payloads.append (std::move (dto.toDomain ()));
             }
             return payloads;
@@ -118,4 +120,3 @@ void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message
 
 } // namespace repository
 } // namespace data
-

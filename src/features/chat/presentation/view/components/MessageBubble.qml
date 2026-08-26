@@ -12,7 +12,8 @@ Item {
     implicitWidth: 600
     implicitHeight: contentItem.height + 8
 
-     property alias bubbleItem: bubble
+    // Exposed for MessagingBody's hit testing and context-menu positioning.
+    property alias bubbleItem: bubble
 
     property int maxBubbleWidth: 400
     property bool isOutgoing: true

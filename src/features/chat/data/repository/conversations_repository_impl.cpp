@@ -17,7 +17,9 @@ ConversationsRepositoryImpl::ConversationsRepositoryImpl(
 QFuture<QList<domain::entity::ConversationList>> ConversationsRepositoryImpl::fetchConversations()
 {
     return m_network->get (core::constants::AppConstants::conversations ())
-        .then ([](const core::network::NetworkResponse &response) ->QList<domain::entity::ConversationList> {
+        .then (QtFuture::Launch::Async,
+               [](const core::network::NetworkResponse &response)
+                   -> QList<domain::entity::ConversationList> {
             if (!response.isSuccess ()) {
                 qWarning() << "Conversatioin request failed, status:"<< response.status_code;
                 return {};

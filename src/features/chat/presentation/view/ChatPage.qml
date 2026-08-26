@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 
 import Theme
 import Features.Chat
@@ -19,6 +20,53 @@ Page {
 
     signal resetMessagingStateRequested
     signal needScrollToLast
+
+    function showConversation(index, userName, userId) {
+        const switchId = ++d.switchId
+        incomingReveal.stop()
+
+        function activateConversation() {
+            if (switchId !== d.switchId)
+                return
+
+            chatPage.resetMessagingStateRequested()
+            d.itemSelectedIndex = index
+            chatPage.receiverId = userId
+            chatPage.selectUserName = userName
+            messagingView.opacity = 1
+            messagingView.x = 0
+            MessagingViewModel.fetchMessage(userId)
+        }
+
+        // There is nothing useful to freeze before the first conversation.
+        if (d.itemSelectedIndex === -1 || messagingView.width <= 0
+                || messagingView.height <= 0) {
+            transitionSnapshot.visible = false
+            activateConversation()
+            return
+        }
+
+        // Freeze the current conversation into one GPU-backed image. The
+        // expensive delegate tree can then change underneath without flashing.
+        const grabStarted = messagingView.grabToImage(function(result) {
+            if (switchId !== d.switchId)
+                return
+
+            transitionSnapshot.source = result.url
+            transitionSnapshot.opacity = 1
+            transitionSnapshot.x = 0
+            transitionSnapshot.visible = true
+            activateConversation()
+        }, Qt.size(Math.ceil(messagingView.width),
+                   Math.ceil(messagingView.height)))
+
+        // A grab can fail while the window is being resized or hidden. Do not
+        // let that prevent the actual conversation switch.
+        if (!grabStarted) {
+            transitionSnapshot.visible = false
+            activateConversation()
+        }
+    }
 
     function collapseUserList() {
         if (d.dragging)
@@ -70,6 +118,7 @@ Page {
         property bool dragStartedCollapsed: false
 
         property int itemSelectedIndex: -1
+        property int switchId: 0
 
         Behavior on sidebarWidth {
             enabled: !d.dragging
@@ -93,13 +142,10 @@ Page {
         model: ConversationsVM
         onExpandRequested: chatPage.expandUserList()
         onItemClicked: function (index, userName, userId) {
-            chatPage.resetMessagingStateRequested();
-            d.itemSelectedIndex = index;
-            // console.log("User UUID:", userId)
-            chatPage.receiverId = userId;
-            chatPage.selectUserName = userName
-            MessagingViewModel.resetModel();
-            MessagingViewModel.fetchMessage(userId);
+            if (index === d.itemSelectedIndex) {
+                return
+            }
+            chatPage.showConversation(index, userName, userId)
         }
     }
 
@@ -173,7 +219,7 @@ Page {
     }
 
     // -- Messaging Loader
-    Loader {
+    StackLayout {
         id: messageLoader
 
         anchors.top: parent.top
@@ -181,21 +227,17 @@ Page {
         anchors.left: splitHandle.right
         anchors.right: parent.right
 
-        sourceComponent: d.itemSelectedIndex != -1 ? messagingList : messagingEmpty
-    }
+        currentIndex: d.itemSelectedIndex != -1 ? 1 : 0
 
-    Component {
-        id: messagingEmpty
+        // sourceComponent: d.itemSelectedIndex != -1 ? messagingList : messagingEmpty
         MessagingEmpty {
-            anchors.fill: parent
+            // anchors.fill: parent
         }
-    }
-    Component {
-        id: messagingList
+
         ListMessaging {
             id: messagingView
 
-            anchors.fill: parent
+            // anchors.fill: parent
             model: MessagingViewModel
             userName: chatPage.selectUserName
             isVisible: !MessagingViewModel.isLoading
@@ -219,5 +261,66 @@ Page {
             }
 
         }
+
     }
+
+    Image {
+        id: transitionSnapshot
+
+        anchors.fill: messageLoader
+        visible: false
+        fillMode: Image.Stretch
+        cache: false
+        z: 10
+    }
+
+    Connections {
+        target: MessagingViewModel
+
+        function onIsLoadingChanged() {
+            if (MessagingViewModel.isLoading || !transitionSnapshot.visible)
+                return
+
+            // Let ListView instantiate and position the incoming delegates
+            // before removing the frozen outgoing conversation.
+            Qt.callLater(function() {
+                messagingView.scrollMessageToLast()
+                incomingReveal.restart()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: incomingReveal
+
+        NumberAnimation {
+            target: transitionSnapshot
+            property: "opacity"
+            to: 0
+            duration: 170
+            easing.type: Easing.OutCubic
+        }
+        // NumberAnimation {
+        //     target: transitionSnapshot
+        //     property: "x"
+        //     to: -10
+        //     duration: 190
+        //     easing.type: Easing.OutCubic
+        // }
+        // NumberAnimation {
+        //     target: messagingView
+        //     property: "x"
+        //     from: 8
+        //     to: 0
+        //     duration: 190
+        //     easing.type: Easing.OutCubic
+        // }
+
+        onFinished: {
+            transitionSnapshot.visible = false
+            transitionSnapshot.source = ""
+            transitionSnapshot.x = 0
+        }
+    }
+
 }

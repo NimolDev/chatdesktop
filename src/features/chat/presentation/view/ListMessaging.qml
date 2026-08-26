@@ -10,7 +10,7 @@ Item {
 
     implicitWidth: AppLayouts.minWidth
     implicitHeight: AppLayouts.minHeight
-    anchors.fill: parent
+    // anchors.fill: parent
 
     property var model
     property bool isVisible
