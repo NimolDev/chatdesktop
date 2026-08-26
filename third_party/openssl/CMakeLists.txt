@@ -178,12 +178,6 @@ function(deploy_bundled_openssl_runtime target_name)
     endif()
 endfunction()
 
-# StringEncryptor runs during the build, so OpenSSL must be beside it before
-# the generated-header custom command invokes the tool.
-if(TARGET StringEncryptor)
-    deploy_bundled_openssl_runtime(StringEncryptor)
-endif()
-
 if(WIN32)
     install(FILES
         "${OPENSSL_CRYPTO_RUNTIME}"
