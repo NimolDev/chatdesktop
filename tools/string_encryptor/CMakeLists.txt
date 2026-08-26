@@ -12,5 +12,8 @@ target_link_libraries(StringEncryptor
         third_party::openssl
 )
 
-# add_dependencies(StringEncryptor openssl_external)
-# target_link_bundled_openssl(StringEncryptor)
+if(WIN32)
+    # This executable is invoked by generated-header build steps. Keep the
+    # bundled OpenSSL runtime beside it so a clean build can run the tool.
+    deploy_bundled_openssl_runtime(StringEncryptor)
+endif()

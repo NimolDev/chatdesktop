@@ -49,6 +49,9 @@ void permissionRequest() {
 }
 
 void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
+
+    app.setWindowIcon(QIcon("qrc:/images/1024.png"));
+
     initializedFont ();
     if (!core::storage::DatabaseManager::initialize ()) {
         qCritical() << "Local database initialization failed";
