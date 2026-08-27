@@ -83,6 +83,7 @@ target_link_libraries(ChatApp
         localization
         theme
         ui
+        # models
         core::application
         core::storage
         core::utils

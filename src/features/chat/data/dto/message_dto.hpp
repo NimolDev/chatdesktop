@@ -45,6 +45,10 @@ struct Item
 struct Message
 {
     QList<Item> messages;
+    int page;
+    int limit;
+    int total;
+    int total_pages;
 
     static std::optional<Message> fromJson(
         const QJsonObject &object,
@@ -71,6 +75,11 @@ struct Message
 
         Message msg;
         msg.messages = std::move (message.value ());
+        msg.page = object.value(QStringLiteral ("page")).toInt ();
+        msg.limit = object.value (QStringLiteral ("limit")).toInt ();
+        msg.total = object.value(QStringLiteral ("total")).toInt ();
+        msg.total_pages = object.value (QStringLiteral ("total_pages")).toInt ();
+
         return msg;
     }
 

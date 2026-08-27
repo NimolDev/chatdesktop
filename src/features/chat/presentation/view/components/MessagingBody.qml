@@ -62,6 +62,19 @@ Item {
         clip: true
         visible: true
 
+        property bool dragSelecting: false
+        property bool dragSelectValue: true
+        readonly property real minimumContentY: originY
+        readonly property real maximumContentY: Math.max(
+            minimumContentY,
+            originY + contentHeight + listView.bottomMargin - height
+        )
+
+        property int loadMoreThreshold: 200
+        property bool paginationPending: false
+        property int paginationAnchorIndex: -1
+        property real paginationAnchorOffset: 0
+
         // Keep short conversations at the bottom of the chat area. Unlike a
         // BottomToTop ListView, this preserves the normal order of section
         // headers (header first, then its messages).
@@ -95,19 +108,26 @@ Item {
             onTriggered: verticalScrollBar.active = false
         }
 
-        property bool dragSelecting: false
-        property bool dragSelectValue: true
-        readonly property real minimumContentY: originY
-        readonly property real maximumContentY: Math.max(
-            minimumContentY,
-            originY + contentHeight + listView.bottomMargin - height
-        )
 
         function clampContentY(value) {
             return Math.max(
                 minimumContentY,
                 Math.min(value, maximumContentY)
             )
+        }
+
+        function capturePaginationAnchor() {
+            paginationAnchorIndex = -1
+            paginationAnchorOffset = 0
+
+            for (let index = 0; index < count; ++index) {
+                const item = itemAtIndex(index)
+                if (item && item.y + item.height >= contentY) {
+                    paginationAnchorIndex = index
+                    paginationAnchorOffset = item.y - contentY
+                    return
+                }
+            }
         }
 
         // -------------------------
@@ -174,15 +194,53 @@ Item {
         Component.onCompleted: {
             body.scrollToLatest()
         }
-        onCountChanged: {
-            Qt.callLater(() =>  {
-                             body.scrollToLatest()
-                             // listView.positionViewAtEnd()
-                         })
-        }
         onVisibleChanged: {
             if (visible)
                 body.scrollToLatest()
+        }
+        onContentYChanged: {
+            const distanceToTop = contentY - minimumContentY
+            if (distanceToTop < loadMoreThreshold
+                    && body.model
+                    && !body.model.isLoading
+                    && !paginationPending) {
+                scrollToLatestTimer.stop()
+                capturePaginationAnchor()
+                paginationPending = true
+                body.model.fetchNextMessage()
+            }
+        }
+
+        Connections {
+            target: body.model
+
+            function onInitialMessagesLoaded() {
+                listView.paginationPending = false
+                listView.paginationAnchorIndex = -1
+                body.scrollToLatest()
+            }
+
+            function onOlderMessagesLoaded(insertedCount) {
+                Qt.callLater(() => {
+                    listView.forceLayout()
+                    if (insertedCount > 0
+                            && listView.paginationAnchorIndex >= 0) {
+                        const targetIndex = listView.paginationAnchorIndex
+                                + insertedCount
+                        listView.positionViewAtIndex(targetIndex,
+                                                     ListView.Beginning)
+                        listView.forceLayout()
+                        const anchorItem = listView.itemAtIndex(targetIndex)
+                        if (anchorItem) {
+                            listView.contentY = listView.clampContentY(
+                                        anchorItem.y
+                                        - listView.paginationAnchorOffset)
+                        }
+                    }
+                    listView.paginationAnchorIndex = -1
+                    listView.paginationPending = false
+                })
+            }
         }
 
         // remove: Transition {

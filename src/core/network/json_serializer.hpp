@@ -110,8 +110,6 @@ public:
         return array;
     }
 
-
-
 };
 
 } // namespace network

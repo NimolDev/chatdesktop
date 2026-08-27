@@ -5,11 +5,9 @@
 #include <QObject>
 #include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
-// #include "domain/messaging.hpp"
-// #include "domain/entity/messags.hpp"
+
 #include "domain/usecase/message_usecase.hpp"
 #include "domain/usecase/send_message_usecase.hpp"
-
 
 class MessagingViewModel : public QAbstractListModel
 {
@@ -39,6 +37,7 @@ public:
     Q_PROPERTY(bool isLoading READ isLoading WRITE setIsLoading NOTIFY isLoadingChanged FINAL)
 
     Q_INVOKABLE void fetchMessage(QString user_id);
+    Q_INVOKABLE void fetchNextMessage();
     Q_INVOKABLE void resetModel();
     Q_INVOKABLE void sendMessage(const QString &receiver_id, const QString &msg);
     Q_INVOKABLE void deleteMessage(QList<int> rows);
@@ -55,16 +54,16 @@ public:
 signals:
     void isLoadingChanged();
     void messageChanged();
+    void initialMessagesLoaded();
+    void olderMessagesLoaded(int insertedCount);
 
 private:
-    void applyFetchedMessages(QList<domain::entity::Payload> messages,
+    void applyFetchedMessages(domain::entity::MessageResponse messages,
                               quint64 requestId);
     QString sectionForDate(const QString &sentAt) const;
     static QString normalizedId(const QString &id);
     void setIsLoading(bool loading);
-    void insertMessage(const domain::entity::Payload &payload);
-    void messageMapping(const domain::entity::Payload &payload);
-
+    void insertMessage(const domain::entity::MessageItem &payload);
 
 private:
 
@@ -72,13 +71,12 @@ private:
 
     std::shared_ptr<domain::usecase::MessageUsecase> m_usecase;
     std::shared_ptr<domain::usecase::SendMessageUsecase> m_msgUsecase;
-    QList<domain::entity::Payload> m_message;
+    domain::entity::MessageResponse m_message;
     QList<QString> m_displayDates;
     QList<QString> m_sections;
 
     QString m_activeConversationId;
     quint64 m_fetchRequestId = 0;
-
 
 private:
     bool m_loading = false;

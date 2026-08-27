@@ -6,7 +6,6 @@
 #include "dto/refresh_token_response_dto.hpp"
 #include <utility>
 
-// #include <
 
 namespace data {
 namespace repository {
@@ -119,9 +118,3 @@ bool SessionRepositoryImpl::isSession() const
 } // namespace data
 
 
-/*
- * eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYWMzMTg1ZC1lMGE4LTQwMmMtYTA2ZC04YTAzMzg5NDkxYTQiLCJ1c2VybmFtZSI6InRlc3Q1IiwiZGlzcGxheV9uYW1lIjoiIiwiaWF0IjoxNzg3MTg4MTQ3LCJleHAiOjE3ODcyNzQ1NDcsInRva2VuX3R5cGUiOiJhY2Nlc3MifQ.yBOjZb6g6Y8lsGiwTtFLVoJw3aBO9rNwVkcdWDL_e9k
- *
- *
- *
- */

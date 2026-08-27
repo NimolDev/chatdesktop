@@ -28,8 +28,8 @@ HomeChatVM::HomeChatVM(
         m_repository.get (),
         &domain::repository::MessageRepository::messageReceived,
         this,
-        [this](const domain::entity::Payload &payload) {
-            qDebug() << "VM: Message received:"<< payload.content.text;
+        [this](const domain::entity::MessageItem &payload) {
+            // qDebug() << "VM: Message received:"<< payload.content.text;
         }
         );
 
