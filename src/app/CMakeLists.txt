@@ -54,7 +54,11 @@ set_target_properties(ChatApp PROPERTIES
     MACOSX_BUNDLE_ICON_FILE app.icns
 )
 endif()
-
+if(WIN32)
+    target_sources(ChatApp PRIVATE
+         ${CMAKE_SOURCE_DIR}/resources/window/app_icon.rc
+    )
+endif()
 
 if (APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Mininum macOS version" FORCE)

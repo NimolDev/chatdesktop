@@ -9,6 +9,9 @@
 /out/
 /bin/
 /lib/
+/release/ 
+/deploy/
+/Output/
 
 # CMake
 /CMakeCache.txt
