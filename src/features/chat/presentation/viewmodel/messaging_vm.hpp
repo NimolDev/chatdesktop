@@ -33,7 +33,6 @@ public:
     static MessagingViewModel *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     static void setInstance(MessagingViewModel *instance);
 
-
     Q_PROPERTY(bool isLoading READ isLoading WRITE setIsLoading NOTIFY isLoadingChanged FINAL)
 
     Q_INVOKABLE void fetchMessage(QString user_id);

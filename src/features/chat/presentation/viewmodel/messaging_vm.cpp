@@ -136,6 +136,7 @@ void MessagingViewModel::resetModel()
     m_displayDates.clear();
     m_sections.clear();
     endResetModel ();
+    setIsLoading (false);
     emit olderMessagesLoaded(0);
 }
 
@@ -169,7 +170,6 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
         return messaging.id;
     case IsMineRole:
         return messaging.is_mine;
-        // return true;
     case SenderIdRole:
         return messaging.sender_id;
     case RecipientIdRole:
@@ -247,14 +247,6 @@ void MessagingViewModel::applyFetchedMessages(
     // replace the messages of the conversation selected after it.
     if (requestId != m_fetchRequestId)
         return;
-
-    // beginResetModel ();
-    // m_message = {};
-    // endResetModel ();
-
-    // resetModel ();
-
-
 
     QList<QString> displayDates;
     QList<QString> sections;

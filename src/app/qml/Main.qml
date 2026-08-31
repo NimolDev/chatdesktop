@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Layouts
+// import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Window
 
@@ -31,6 +31,11 @@ ApplicationWindow {
     menuBar:  Qt.platform.os === "osx" ? menuBar : null
 
     Component.onCompleted: AppController.checkAuthentication()
+
+    onClosing: function(close) {
+        close.accepted = false
+        window.hide()
+    }
 
     Connections {
         target: AppController

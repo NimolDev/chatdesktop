@@ -22,8 +22,7 @@
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
 #include "chat/presentation/viewmodel/home_chat_vm.hpp"
 
-AppContainer::AppContainer(QQmlApplicationEngine *engine)
-    : m_engine(engine)
+AppContainer::AppContainer()
 {
     registerCoreService ();
     registerAppController ();
@@ -81,11 +80,6 @@ void AppContainer::registerAppController()
     AppController::setInstance (m_container.resolve<AppController> ().get ());
 }
 
-void AppContainer::registerQmlSignleton()
-{
-    LoginVM::setInstance(m_container.resolve<LoginVM>().get());
-}
-
 void AppContainer::registerAuthentication()
 {
     m_container.registerFactory<domain::repository::LoginRepository>([](ServiceContainer &c) {
@@ -119,7 +113,7 @@ void AppContainer::registerChat()
         return std::make_shared<domain::usecase::SendMessageUsecase> (c.resolve<domain::repository::MessageRepository> ());
     });
     m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
-        return  std::make_shared<MessagingViewModel> (
+        return std::make_shared<MessagingViewModel> (
             c.resolve<domain::usecase::MessageUsecase> (),
             c.resolve<domain::usecase::SendMessageUsecase> ()
             );

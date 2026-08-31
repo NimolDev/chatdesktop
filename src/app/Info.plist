@@ -48,5 +48,6 @@
     <key>NSLocationUsageDescription</key>
     <string>We need to permission to allow use your current location</string>
 
+
 </dict>
 </plist>
