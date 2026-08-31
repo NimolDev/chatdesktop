@@ -68,7 +68,7 @@ endif()
 #     I18N_SOURCE_LANGUAGE en
 #     I18N_TRANSLATED_LANGUAGES km
 # )
+add_subdirectory(third_party)
 add_subdirectory(tools/string_encryptor)
 add_subdirectory(resources)
-add_subdirectory(third_party)
 add_subdirectory(src)
