@@ -19,14 +19,14 @@ class MessageRepository : public QObject
 public:
     explicit MessageRepository(QObject *parent = nullptr) : QObject(parent) {};
     virtual ~MessageRepository() = default;
-    virtual QFuture<QList<domain::entity::Payload>>fetchMessageById(QString user_id) = 0;
+    virtual QFuture<domain::entity::MessageResponse>fetchMessageById(QString user_id, int page) = 0;
     virtual void sendMessage(domain::entity::Payload &payload) = 0;
 
 public:
     virtual QString currentUserId() const  = 0;
 signals:
-    void messageReceived(const domain::entity::Payload &payload);
-    void messageSent(const domain::entity::Payload &payload);
+    void messageReceived(const domain::entity::MessageItem &payload);
+    void messageSent(const domain::entity::MessageItem &payload);
 };
 
 } // namespace repository

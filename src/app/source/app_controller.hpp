@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QtQml/qqmlengine.h>
 #include <QtQml/qqmlregistration.h>
+#include <QtConcurrent/QtConcurrent>
 
 #include "usecase/logout_usecase.hpp"
 #include "usecase/session_usecase.hpp"

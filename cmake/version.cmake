@@ -8,6 +8,6 @@ set(APP_VERSION
 )
 
 set(APP_BUILD_NUMBER 1)
-set(APP_BUNDLE_IDENTIFIER "com.example.chatapp")
+set(APP_BUNDLE_IDENTIFIER "com.nimol.MacosNotification")
 set(APP_ORGANIZATION_NAME "Your Company")
 set(APP_ORGANIZATION_DOMAIN "example.com")

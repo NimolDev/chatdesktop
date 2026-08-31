@@ -4,6 +4,10 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake")
 
 project(Chat_Desktop VERSION ${APP_VERSION} LANGUAGES CXX)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 option(
     PROTECT_QML_SOURCE
     "Remove raw QML source from application resources"
@@ -40,11 +44,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Quick
-    # Qml
+    Core
+    Widgets
     Network
     LinguistTools
     Xml
-    Core
     Sql
     Positioning
     Location

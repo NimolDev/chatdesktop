@@ -36,7 +36,6 @@ void ConversationsVM::setInstance(ConversationsVM *instance)
 
 void ConversationsVM::fetchConversations()
 {
-    // m_usecase->execute ();
     m_watcher.setFuture (m_usecase->execute ());
 }
 

@@ -19,11 +19,11 @@ public:
         QObject *parent = nullptr
         );
 
-    QFuture<QList<domain::entity::Payload>> execute(QString user_id);
+    QFuture<domain::entity::MessageResponse> execute(QString user_id, int page);
 
 signals:
-    void onMessagedReceived(const domain::entity::Payload &payload);
-    void messageSent(const domain::entity::Payload &payload);
+    void onMessagedReceived(const domain::entity::MessageItem &payload);
+    void messageSent(const domain::entity::MessageItem &payload);
 
 private:
     std::shared_ptr<domain::repository::MessageRepository> m_repository;

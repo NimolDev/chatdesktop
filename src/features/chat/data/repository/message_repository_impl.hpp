@@ -21,7 +21,7 @@ public:
 
     // MessageRepository interface
 public:
-   QFuture<QList<domain::entity::Payload> > fetchMessageById(QString user_id) override;
+   QFuture<domain::entity::MessageResponse > fetchMessageById(QString user_id, int page) override;
    void sendMessage(domain::entity::Payload &payload) override;
    QString currentUserId() const override;
 

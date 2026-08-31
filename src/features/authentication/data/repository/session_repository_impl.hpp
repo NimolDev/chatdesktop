@@ -25,6 +25,7 @@ public:
     QFuture<bool> sessionChecked() override;
     bool isSession() const override;
     bool logout() override;
+      void connectXmpp();
 
 private:
     std::shared_ptr<core::xmpp::XmppManager> m_xmpp;
@@ -33,6 +34,8 @@ private:
     bool m_sessionChecked = false;
 
     QFuture<bool> refreshToken();
+
+
 };
 
 } // namespace repository

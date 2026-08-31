@@ -56,9 +56,11 @@ AppController::AppController(
             case core::xmpp::XmppManager::ConnectionState::Disconnected:
                 qDebug() << "Appcontroller disconnected ";
                 // setState (AppState::Authenticated);
+                break;
             case core::xmpp::XmppManager::ConnectionState::Connecting:
                 qDebug() << "Appcontroller Connecting ";
                 // setState (AppState::Authenticated);
+                break;
             case core::xmpp::XmppManager::ConnectionState::Connected:
                 qDebug() << "Appcontroller Connected ";
                 // setState (AppState::Authenticated);

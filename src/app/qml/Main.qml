@@ -1,9 +1,9 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Layouts
+// import QtQuick.Layouts
 import QtQuick.Controls.Basic
-import QtQuick.Window
+// import QtQuick.Window
 
 import Localization
 import Theme
@@ -15,22 +15,30 @@ import "component" as AppComponent
 
 ApplicationWindow {
     id: window
-    width: AppLayouts.width
-    height: AppLayouts.height
-    minimumWidth: AppLayouts.minWidth
-    minimumHeight: AppLayouts.minHeight
-    visible: true
+    width: 1080
+    height: 720
+    minimumWidth: 1080
+    minimumHeight: 720
+    visible: false
     title: AppController.userName
 
-    property bool lightMode: Application.styleHints.colorScheme === Qt.Light
-    property color reallyDark: "#1f1f1f"
-    property color dark: "#262626"
-    property color reallyLight: "#e7e7e7"
+
+    // property bool lightMode: Application.styleHints.colorScheme === Qt.Light
+    // property color reallyDark: "#1f1f1f"
+    // property color dark: "#262626"
+    // property color reallyLight: "#e7e7e7"
     property color light: Colors.primary
+    // color: "black"
+
     readonly property Window aboutDialog: aboutDialogLoader.item as Window
     menuBar:  Qt.platform.os === "osx" ? menuBar : null
 
-    Component.onCompleted: AppController.checkAuthentication()
+     Component.onCompleted: AppController.checkAuthentication()
+
+    onClosing: function(close) {
+        close.accepted = false
+        window.hide()
+    }
 
     Connections {
         target: AppController
@@ -38,7 +46,7 @@ ApplicationWindow {
             var state = AppController.state
             switch(AppController.state ) {
             case AppController.Unauthenticated:
-                 pageLoader.sourceComponent = loginPage
+                pageLoader.sourceComponent = loginPage
                 break
             case AppController.Logout:
                  pageLoader.sourceComponent = loginPage
@@ -54,7 +62,7 @@ ApplicationWindow {
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
-            pageLoader.sourceComponent = chatPage
+            // pageLoader.sourceComponent = chatPage
             window.title = LoginVM.userName
         }
     }
@@ -128,10 +136,17 @@ ApplicationWindow {
         }
     }
 
-
     Loader {
         id: pageLoader
         anchors.fill: parent
+        // color: Colors.background
+        sourceComponent: background
+    }
+    Component {
+        id: background
+        Rectangle {
+            color: Colors.background
+        }
     }
 
     Component {

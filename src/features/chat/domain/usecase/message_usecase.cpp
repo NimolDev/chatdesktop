@@ -14,11 +14,11 @@ MessageUsecase::MessageUsecase(
         m_repository.get (),
         &domain::repository::MessageRepository::messageReceived,
         this,
-        [this](const domain::entity::Payload &payload) {
+        [this](const domain::entity::MessageItem &payload) {
             const QString id = QString(payload.sender_id).remove(QLatin1Char('-'));
             qDebug() << "Message from: "<< payload.sender_id;
              if (id == m_userListener) {
-                domain::entity::Payload newPayload = payload;
+                domain::entity::MessageItem newPayload = payload;
                 const QString currentUserId = QString(m_repository->currentUserId())
                                                   .remove(QLatin1Char('-'));
                 newPayload.is_mine = id == currentUserId;
@@ -30,38 +30,38 @@ MessageUsecase::MessageUsecase(
         m_repository.get (),
         &domain::repository::MessageRepository::messageSent,
         this,
-        [this](const domain::entity::Payload &payload) {
-            domain::entity::Payload newPayload = payload;
+        [this](const domain::entity::MessageItem &payload) {
+            domain::entity::MessageItem newPayload = payload;
             newPayload.is_mine = payload.sender_id == m_repository->currentUserId ();
             emit messageSent (newPayload);
         }
         );
 }
 
-QFuture<QList<entity::Payload>> MessageUsecase::execute(QString user_id)
+QFuture<entity::MessageResponse> MessageUsecase::execute(QString user_id, int page)
 {
     m_userListener = QString(user_id).remove(QLatin1Char('-'));
     // Access the QObject-backed repository before entering the worker thread.
     const QString currentUserId = QString(m_repository->currentUserId())
                                       .remove(QLatin1Char('-'));
 
-    return m_repository->fetchMessageById(user_id)
+    return m_repository->fetchMessageById(user_id, page)
         .then(QtFuture::Launch::Async,
-              [currentUserId](QList<entity::Payload> payloads) {
-            for (entity::Payload &payload : payloads) {
+              [currentUserId](entity::MessageResponse payloads) {
+            for (entity::MessageItem &payload : payloads.messages) {
                 const QString senderId = QString(payload.sender_id)
                                              .remove(QLatin1Char('-'));
                 payload.is_mine = senderId == currentUserId;
             }
             std::stable_sort(
-                payloads.begin (),
-                payloads.end(),
-                [](const domain::entity::Payload &left,
-                   const domain::entity::Payload &right) {
+                payloads.messages.begin (),
+                payloads.messages.end(),
+                [](const domain::entity::MessageItem &left,
+                   const domain::entity::MessageItem &right) {
                     bool leftOk = false;
                     bool rightOk = false;
-                    const qint64 leftEpoch = left.timestamp.toLongLong(&leftOk);
-                    const qint64 rightEpoch = right.timestamp.toLongLong(&rightOk);
+                    const qint64 leftEpoch = left.body.timestamp.toLongLong(&leftOk);
+                    const qint64 rightEpoch = right.body.timestamp.toLongLong(&rightOk);
 
                     // Keep valid timestamps before invalid values while preserving
                     // the original order of invalid entries (stable_sort).

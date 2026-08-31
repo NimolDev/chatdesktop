@@ -1,14 +1,28 @@
 qt_add_executable(ChatApp
     MACOSX_BUNDLE
-    main.cpp
+    source/main.cpp
     ${CMAKE_SOURCE_DIR}/resources/Resources.qrc
 )
+
+if(APPLE)
+    target_sources(ChatApp
+        PRIVATE
+            platform/macos/macos_tray_icon.hpp
+            platform/macos/macos_tray_icon.mm
+            platform/macos/notification.hpp
+            platform/macos/notification.mm
+
+    )
+    target_link_libraries(ChatApp PRIVATE "-framework AppKit" "-framework UserNotifications")
+endif()
+
 target_compile_definitions(ChatApp
     PRIVATE
         $<$<CONFIG:Debug>:QT_QML_DEBUG>
 )
 target_include_directories(ChatApp
     PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/source"
         "${CMAKE_SOURCE_DIR}"
         "${CMAKE_SOURCE_DIR}/third_party"
         "${CMAKE_SOURCE_DIR}/src/shared"
@@ -17,10 +31,10 @@ target_include_directories(ChatApp
 )
 
 set(CHATAPP_QML_FILES
-    Main.qml
-    SplashScreen.qml
-    component/Menu.qml
-    AboutDialog.qml
+    qml/Main.qml
+    qml/SplashScreen.qml
+    qml/AboutDialog.qml
+    qml/component/Menu.qml
 )
 
 protect_qml_files(${CHATAPP_QML_FILES})
@@ -32,9 +46,14 @@ qt_add_qml_module(ChatApp
         ${CHATAPP_QML_FILES}
 
     SOURCES
-        service_container.hpp
-        app_container.hpp app_container.cpp
-        app_controller.hpp app_controller.cpp
+        source/service_container.hpp
+        source/app_container.hpp
+        source/app_container.cpp
+        source/app_controller.hpp
+        source/app_controller.cpp
+        SOURCES platform/notification.hpp
+
+
     # RESOURCES Info.plist
 )
 
@@ -71,27 +90,71 @@ set_target_properties(ChatApp PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION "${APP_BUILD_NUMBER}"
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST
-        "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/macos/Info.plist"
 
     # MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
 
+# Ninja/Makefile builds otherwise receive only a linker-generated ad-hoc
+# signature. That signature does not seal Info.plist, so macOS cannot associate
+# notification authorization with MACOSX_BUNDLE_GUI_IDENTIFIER. Sign the
+# completed bundle for local development; distribution builds can disable this
+# and apply their Developer ID signature during packaging.
+
+# if(APPLE)
+#     option(CHATAPP_ADHOC_CODE_SIGN
+#         "Ad-hoc sign the completed macOS app bundle"
+#         ON
+#     )
+#     if(CHATAPP_ADHOC_CODE_SIGN)
+#         find_program(CHATAPP_CODESIGN_EXECUTABLE codesign REQUIRED)
+#         add_custom_command(TARGET ChatApp POST_BUILD
+#             COMMAND "${CHATAPP_CODESIGN_EXECUTABLE}"
+#                 --force
+#                 --deep
+#                 --sign -
+#                 "$<TARGET_BUNDLE_DIR:ChatApp>"
+#             COMMENT "Ad-hoc signing ChatApp.app for macOS services"
+#             VERBATIM
+#         )
+#     endif()
+# endif()
+
+if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
+
+    message(STATUS "Apple signing enabled")
+
+    add_custom_command(
+        TARGET ChatApp
+        POST_BUILD
+
+        COMMAND /usr/bin/codesign
+            --force
+            --deep
+            --sign "${APPLE_SIGNING_IDENTITY}"
+            "$<TARGET_BUNDLE_DIR:ChatApp>"
+
+        COMMENT "Signing ChatApp with Apple Development certificate"
+        VERBATIM
+    )
+
+endif()
+
 target_link_libraries(ChatApp
     PUBLIC
         Qt6::Quick
-        # Qt6::QuickControls2
         Qt6::Gui
+        Qt6::Widgets
+        core::application
+        core::storage
+        core::utils
         constants
         resources
         localization
         theme
         ui
-        core::application
-        core::storage
-        core::utils
         authentication
-        # authenticationplugin
         chat
 )
 

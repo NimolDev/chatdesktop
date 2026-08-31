@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QtTypes>
+#include <QList>
 
 namespace domain {
 namespace entity {
@@ -35,6 +36,26 @@ struct Payload
     QString timestamp;
     Content content;
 };
+
+struct MessageItem
+{
+    QString id;
+    QString sender_id ;
+    QString recipient_id;
+    Payload body;
+    QString sent_at;
+    bool is_mine;
+};
+
+struct MessageResponse
+{
+    QList<MessageItem> messages ;
+    int page;
+    int limit;
+    int total;
+    int total_pages;
+};
+
 
 } // namespace entity
 } // namespace domain

@@ -259,9 +259,7 @@ Page {
                     messagingView.scrollMessageToLast();
                 }
             }
-
         }
-
     }
 
     Image {
@@ -300,22 +298,6 @@ Page {
             duration: 170
             easing.type: Easing.OutCubic
         }
-        // NumberAnimation {
-        //     target: transitionSnapshot
-        //     property: "x"
-        //     to: -10
-        //     duration: 190
-        //     easing.type: Easing.OutCubic
-        // }
-        // NumberAnimation {
-        //     target: messagingView
-        //     property: "x"
-        //     from: 8
-        //     to: 0
-        //     duration: 190
-        //     easing.type: Easing.OutCubic
-        // }
-
         onFinished: {
             transitionSnapshot.visible = false
             transitionSnapshot.source = ""

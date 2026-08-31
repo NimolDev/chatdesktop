@@ -21,6 +21,7 @@ struct Item
 struct Message
 {
     QList<Item> messages;
+
 };
 
 } // namespace entity

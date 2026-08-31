@@ -20,7 +20,7 @@ MessagingViewModel::MessagingViewModel(
         m_usecase.get (),
         &domain::usecase::MessageUsecase::onMessagedReceived,
         this,
-        [this](const domain::entity::Payload &payload) {
+        [this](const domain::entity::MessageItem &payload) {
             qDebug() << "MesaagingVM: Message received";
             // auto const message = messageMapping();
             // messageMapping (payload);
@@ -32,9 +32,9 @@ MessagingViewModel::MessagingViewModel(
         m_usecase.get (),
         &domain::usecase::MessageUsecase::messageSent,
         this,
-        [this](const domain::entity::Payload &payload) {
+        [this](const domain::entity::MessageItem &payload) {
             // messageMapping (payload);
-            if (normalizedId(payload.receiver_id) == m_activeConversationId)
+            if (normalizedId(payload.recipient_id) == m_activeConversationId)
                 insertMessage (payload);
         }
         );
@@ -62,11 +62,68 @@ void MessagingViewModel::fetchMessage(QString user_id)
     m_activeConversationId = normalizedId(user_id);
     setIsLoading (true);
 
-    m_usecase->execute(user_id).then(
+    m_usecase->execute(user_id, 1).then(
         this,
-        [this, requestId](QList<domain::entity::Payload> messages) {
+        [this, requestId](domain::entity::MessageResponse messages) {
             applyFetchedMessages(std::move(messages), requestId);
         });
+}
+
+void MessagingViewModel::fetchNextMessage()
+{
+    if (m_loading)
+        return;
+
+    if (m_activeConversationId.isEmpty()
+        || m_message.page < 1
+        || m_message.page >= m_message.total_pages) {
+        emit olderMessagesLoaded(0);
+        return;
+    }
+
+    const quint64 requestId = m_fetchRequestId;
+    const int nextPage = m_message.page + 1;
+    setIsLoading (true);
+    m_usecase->execute(m_activeConversationId, nextPage)
+        .then(this,
+              [this, requestId, nextPage](domain::entity::MessageResponse response) {
+                  if (requestId != m_fetchRequestId)
+                      return;
+
+                  if (response.page < 1) {
+                      setIsLoading(false);
+                      emit olderMessagesLoaded(0);
+                      return;
+                  }
+
+                  QList<QString> displayDates;
+                  QList<QString> sections;
+                  displayDates.reserve(response.messages.size());
+                  sections.reserve(response.messages.size());
+                  for (const auto &message : std::as_const(response.messages)) {
+                      displayDates.append(
+                          core::utils::formateConversationDate(message.body.timestamp));
+                      sections.append(sectionForDate(message.body.timestamp));
+                  }
+
+                  const int insertedCount = response.messages.size();
+                  if (insertedCount > 0) {
+                      const int last = insertedCount - 1;
+                      beginInsertRows(QModelIndex(), 0, last);
+                      m_message.messages = response.messages + m_message.messages;
+                      m_displayDates = displayDates + m_displayDates;
+                      m_sections = sections + m_sections;
+                      endInsertRows();
+                  }
+
+                  m_message.page = response.page > 0 ? response.page : nextPage;
+                  m_message.limit = response.limit;
+                  m_message.total = response.total;
+                  m_message.total_pages = response.total_pages;
+                  setIsLoading (false);
+                  emit olderMessagesLoaded(insertedCount);
+                  // emit messageChanged ();
+              });
 }
 
 void MessagingViewModel::resetModel()
@@ -79,6 +136,8 @@ void MessagingViewModel::resetModel()
     m_displayDates.clear();
     m_sections.clear();
     endResetModel ();
+    setIsLoading (false);
+    emit olderMessagesLoaded(0);
 }
 
 void MessagingViewModel::sendMessage(const QString &receiver_id, const QString &msg)
@@ -93,37 +152,34 @@ int MessagingViewModel::rowCount(const QModelIndex &parent) const
         qDebug() << "Parent invalide";
         return 0;
     }
-    return m_message.size ();
+    return m_message.messages.size ();
 }
 
 QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid () ||
         index.row() < 0 ||
-        index.row () >= m_message.size ()) {
+        index.row () >= m_message.messages.size ()) {
         return {};
     }
 
-    const auto &messaging = m_message[index.row ()];
+    const auto &messaging = m_message.messages[index.row ()];
 
     switch (role) {
     case IdRole:
-        return messaging.message_id;
+        return messaging.id;
     case IsMineRole:
         return messaging.is_mine;
     case SenderIdRole:
         return messaging.sender_id;
     case RecipientIdRole:
-        return messaging.receiver_id;
+        return messaging.recipient_id;
     case BodyRole:
-        return messaging.content.text;
+        return messaging.body.content.text;
     case SentAtRole:
         return m_displayDates.value(index.row());
-        // return messaging.timestamp;
     case SectionRole:
         return m_sections.value(index.row());
-        // return messaging.timestamp;
-        // return core::utils::formateConversationDate (messaging.timestamp);
     default:
         return {};
     }
@@ -156,14 +212,14 @@ void MessagingViewModel::setIsLoading(bool loading)
     emit isLoadingChanged ();
 }
 
-void MessagingViewModel::insertMessage(const domain::entity::Payload &payload)
+void MessagingViewModel::insertMessage(const domain::entity::MessageItem &payload)
 {
-    int row = m_message.count ();
+    int row = m_message.messages.count ();
 
     beginInsertRows (QModelIndex(), row, row);
-    m_message.append (payload);
-    m_displayDates.append(core::utils::formateConversationDate(payload.timestamp));
-    m_sections.append(sectionForDate(payload.timestamp));
+    m_message.messages.append (payload);
+    m_displayDates.append(core::utils::formateConversationDate(payload.body.timestamp));
+    m_sections.append(sectionForDate(payload.body.timestamp));
     endInsertRows ();
 }
 
@@ -172,11 +228,11 @@ void MessagingViewModel::deleteMessage(QList<int> rows)
     std::sort (rows.begin (), rows.end (), std::greater<int>());
     rows.erase (std::unique(rows.begin (), rows.end ()), rows.end ());
     for (int row : rows) {
-        if (row < 0 || row >= m_message.count ()) {
+        if (row < 0 || row >= m_message.messages.count ()) {
             continue;
         }
         beginRemoveRows (QModelIndex(), row, row);
-        m_message.remove (row);
+        m_message.messages.remove (row);
         m_displayDates.remove(row);
         m_sections.remove(row);
         endRemoveRows ();
@@ -184,7 +240,7 @@ void MessagingViewModel::deleteMessage(QList<int> rows)
 }
 
 void MessagingViewModel::applyFetchedMessages(
-    QList<domain::entity::Payload> messages,
+   domain::entity::MessageResponse messages,
     quint64 requestId)
 {
     // A slower request for the previously selected conversation must never
@@ -192,42 +248,14 @@ void MessagingViewModel::applyFetchedMessages(
     if (requestId != m_fetchRequestId)
         return;
 
-    // beginResetModel ();
-    // m_message = {};
-    // endResetModel ();
-
-    // resetModel ();
-
-
-    // std::stable_sort(
-    //     messages.begin (),
-    //     messages.end(),
-    //     [](const domain::entity::Payload &left,
-    //        const domain::entity::Payload &right) {
-    //         bool leftOk = false;
-    //         bool rightOk = false;
-    //         const qint64 leftEpoch = left.timestamp.toLongLong(&leftOk);
-    //         const qint64 rightEpoch = right.timestamp.toLongLong(&rightOk);
-
-    //         // Keep valid timestamps before invalid values while preserving
-    //         // the original order of invalid entries (stable_sort).
-    //         if (leftOk != rightOk)
-    //             return leftOk;
-    //         if (!leftOk)
-    //             return false;
-
-    //         return leftEpoch < rightEpoch;
-    //     }
-    // );
-
     QList<QString> displayDates;
     QList<QString> sections;
-    displayDates.reserve(messages.size());
-    sections.reserve(messages.size());
-    for (const auto &message : std::as_const(messages)) {
+    displayDates.reserve(messages.messages.size());
+    sections.reserve(messages.messages.size());
+    for (const auto &message : std::as_const(messages.messages)) {
         displayDates.append(
-            core::utils::formateConversationDate(message.timestamp));
-        sections.append(sectionForDate(message.timestamp));
+            core::utils::formateConversationDate(message.body.timestamp));
+        sections.append(sectionForDate(message.body.timestamp));
     }
 
     beginResetModel ();
@@ -236,6 +264,7 @@ void MessagingViewModel::applyFetchedMessages(
     m_sections = std::move(sections);
     endResetModel ();
     setIsLoading (false);
+    emit initialMessagesLoaded();
     emit messageChanged ();
 }
 
@@ -270,19 +299,4 @@ QString MessagingViewModel::sectionForDate(const QString &sentAt) const
     }
 
     return date.toString(QStringLiteral("dd MMM yyyy"));
-}
-
-void MessagingViewModel::messageMapping(const domain::entity::Payload &payload)
-{
-    domain::entity::Message message;
-
-    domain::entity::Item item;
-    item.is_mine = payload.is_mine;
-    item.id = payload.message_id;
-    item.sender_id = payload.sender_id;
-    item.recipient_id = payload.receiver_id;
-    item.body = payload.content.text;
-    item.sent_at = payload.timestamp;
-    message.messages.append (item);
-    // insertMessage (message);
 }

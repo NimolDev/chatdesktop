@@ -7,8 +7,6 @@ Item {
     id: sideMenu
     visible: isShow
     implicitWidth: 250
-
-
     Rectangle {
         anchors.fill: parent
         anchors.margins: AppLayouts.l_padding
@@ -16,5 +14,4 @@ Item {
         radius: AppLayouts.l_radius
         border.color: Colors.suface3
     }
-
 }

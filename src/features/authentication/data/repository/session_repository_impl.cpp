@@ -6,7 +6,6 @@
 #include "dto/refresh_token_response_dto.hpp"
 #include <utility>
 
-// #include <
 
 namespace data {
 namespace repository {
@@ -40,11 +39,7 @@ QFuture<bool> SessionRepositoryImpl::sessionChecked()
     if (isExpired) {
         return refreshToken ();
     }
-    m_xmpp->connectToServer(
-        m_user->xmpp_jid,
-        m_user->password,
-        m_user->xmpp_host,
-        m_user->xmpp_port);
+
     // emit sessionChanged(false);
     return QtFuture::makeReadyValueFuture (true);
 }
@@ -64,6 +59,18 @@ bool SessionRepositoryImpl::logout()
     }
     return false;
 
+}
+
+void SessionRepositoryImpl::connectXmpp()
+{
+    if (!m_xmpp || !m_user) {
+        return ;
+    }
+    m_xmpp->connectToServer(
+        m_user->xmpp_jid,
+        m_user->password,
+        m_user->xmpp_host,
+        m_user->xmpp_port);
 }
 
 QFuture<bool> SessionRepositoryImpl::refreshToken()
@@ -119,9 +126,3 @@ bool SessionRepositoryImpl::isSession() const
 } // namespace data
 
 
-/*
- * eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYWMzMTg1ZC1lMGE4LTQwMmMtYTA2ZC04YTAzMzg5NDkxYTQiLCJ1c2VybmFtZSI6InRlc3Q1IiwiZGlzcGxheV9uYW1lIjoiIiwiaWF0IjoxNzg3MTg4MTQ3LCJleHAiOjE3ODcyNzQ1NDcsInRva2VuX3R5cGUiOiJhY2Nlc3MifQ.yBOjZb6g6Y8lsGiwTtFLVoJw3aBO9rNwVkcdWDL_e9k
- *
- *
- *
- */

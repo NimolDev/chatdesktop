@@ -127,6 +127,7 @@ private:
     QString m_lastError;
     QString m_currentJid;
     std::optional<ConnectionParameters> m_pendingConnection;
+    bool m_connectionStartScheduled = false;
 
     std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
 

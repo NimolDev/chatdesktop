@@ -29,14 +29,16 @@ MessageRepositoryImpl::MessageRepositoryImpl(
 
 }
 
-QFuture<QList<domain::entity::Payload>> MessageRepositoryImpl::fetchMessageById(QString user_id)
+QFuture<domain::entity::MessageResponse> MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
 {
     QUrlQuery query;
-    query.addQueryItem (QStringLiteral ("limit"), "100");
+    query.addQueryItem (QStringLiteral ("limit"), "50");
+    query.addQueryItem (QStringLiteral ("page"), QString::number (page));
+
     return m_network ->get (core::constants::AppConstants::messages (user_id), query)
         .then(QtFuture::Launch::Async,
               [](const core::network::NetworkResponse &response)
-                  -> QList<domain::entity::Payload> {
+                  -> domain::entity::MessageResponse {
             if (!response.isSuccess ()) {
                 qWarning() << "Message request failed, status:"<<response.status_code;
                 return {};
@@ -49,18 +51,16 @@ QFuture<QList<domain::entity::Payload>> MessageRepositoryImpl::fetchMessageById(
                 return {};
             }
 
-            auto dto = core::network::JsonSerializer::fromObject<data::dto::Message> (document->object (), &error);
-            if (!dto.has_value ()) {
+            auto d = core::network::JsonSerializer::fromObject<data::dto::MessageDto> (document->object (), &error);
+            if (!d.has_value ()) {
                 qWarning() << "Message mapping error: "<< error;
                 return {};
             }
-             QList<domain::entity::Payload> payloads;
-            for (const dto::Item &message : std::as_const (dto->messages)) {
-                data::dto::PayloadDto dto = data::dto::PayloadDto::fromJsonString (message.body);
-                // qDebug() << "Message response: "<< dto.sender_id;
-                payloads.append (std::move (dto.toDomain ()));
-            }
-            return payloads;
+
+            auto domain = d->toDomain ();
+
+            return domain;
+
         });
 }
 
@@ -72,7 +72,16 @@ void MessageRepositoryImpl::sendMessage(domain::entity::Payload &payload)
     QString jsonString = dto.toJsonString ();
     m_xmpp->sendMessage (payload.receiver_id, jsonString);
     saveMessage (payload.receiver_id, jsonString);
-    emit messageSent(payload);
+
+
+    dto::MessageItemDto msgDto;
+    msgDto.id = dto.message_id;
+    msgDto.sender_id = dto.sender_id;
+    msgDto.recipient_id = dto.receiver_id;
+    msgDto.body = std::move (dto);
+
+
+    emit messageSent(msgDto.toDomain ());
 }
 
 QString MessageRepositoryImpl::currentUserId() const
@@ -108,10 +117,17 @@ void MessageRepositoryImpl::saveMessage(QString receiver_id, QString body)
 void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message)
 {
     // qDebug() << "Message receive:"<<message.from;
-    data::dto::PayloadDto dto = data::dto::PayloadDto::fromJsonString (message.body);
+    data::dto::PayloadDto dto = data::dto::PayloadDto::fromJsonString (message.body).value ();
+    dto::MessageItemDto msgDto;
+    msgDto.id = dto.message_id;
+    // msgDto.sent_at =
+    msgDto.sender_id = dto.sender_id;
+    msgDto.recipient_id = dto.receiver_id;
+    msgDto.body = std::move (dto);
 
-    domain::entity::Payload payload;
-    payload = dto.toDomain ();
+
+    domain::entity::MessageItem payload;
+    payload = msgDto.toDomain ();
     emit messageReceived (payload);
 
 }
