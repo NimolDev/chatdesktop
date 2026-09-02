@@ -21,8 +21,10 @@
 #include "app_container.hpp"
 
 #ifdef Q_OS_MACOS
+#include "platform/macos/macos_menu_bar.hpp"
 #include "platform/macos/macos_tray_icon.hpp"
 #include "platform/macos/notification.hpp"
+#include "platform/macos/pet_window.hpp"
 #endif
 
 
@@ -112,7 +114,6 @@ int main(int argc, char *argv[])
     //     qInfo() << "ChatApp is already running; refusing duplicate launch";
     //     return EXIT_SUCCESS;
     // }
-
     app.setQuitOnLastWindowClosed (false);
 
     // Container-owned QML singletons must outlive the QML engine. Local
@@ -139,6 +140,26 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+#ifdef Q_OS_MACOS
+    // Defer until QML has created the native backing window. Reapplying when
+    // visibility changes also covers Qt recreating it after a hide/show cycle.
+    if (auto *petWindow = engine.rootObjects().constFirst()->findChild<QWindow *>(
+            QStringLiteral("desktopPetWindow"))) {
+        const auto configurePet = [petWindow]() {
+            platform::macos::configurePetWindow(petWindow);
+        };
+        QObject::connect(petWindow, &QWindow::visibleChanged, &app,
+                         [configurePet](bool visible) {
+                             if (visible) {
+                                 QTimer::singleShot(0, configurePet);
+                             }
+                         });
+        QTimer::singleShot(0, configurePet);
+    } else {
+        qWarning() << "Desktop pet window was not found";
+    }
+#endif
+
     permissionRequest ();
 #ifdef Q_OS_MACOS
     // Permission UI must be requested after the app has entered its event loop.
@@ -161,8 +182,9 @@ int main(int argc, char *argv[])
 
 
 #ifdef Q_OS_MACOS
+    platform::macos::MacosMenuBar menuBar(&app, window);
     MacosTrayIcon trayIcon(&app, window);
-    trayIcon.setBadgeNumber (1000);
+    trayIcon.setBadgeNumber (99);
 #else
 
     QSystemTrayIcon trayIcon;

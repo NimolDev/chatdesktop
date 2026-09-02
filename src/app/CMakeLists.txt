@@ -7,10 +7,14 @@ qt_add_executable(ChatApp
 if(APPLE)
     target_sources(ChatApp
         PRIVATE
+            platform/macos/macos_menu_bar.hpp
+            platform/macos/macos_menu_bar.mm
             platform/macos/macos_tray_icon.hpp
             platform/macos/macos_tray_icon.mm
             platform/macos/notification.hpp
             platform/macos/notification.mm
+            platform/macos/pet_window.hpp
+            platform/macos/pet_window.mm
 
     )
     target_link_libraries(ChatApp PRIVATE "-framework AppKit" "-framework UserNotifications")
@@ -52,6 +56,7 @@ qt_add_qml_module(ChatApp
         source/app_controller.hpp
         source/app_controller.cpp
         SOURCES platform/notification.hpp
+        QML_FILES qml/PetWindow.qml
 
 
     # RESOURCES Info.plist

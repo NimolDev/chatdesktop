@@ -69,5 +69,6 @@
         <file>icons/xmark.png</file>
         <file>icons/xmark@2x.png</file>
         <file>icons/xmark@3x.png</file>
+        <file>images/vp_start_blink.gif</file>
     </qresource>
 </RCC>
