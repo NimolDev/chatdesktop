@@ -39,11 +39,7 @@ QFuture<bool> SessionRepositoryImpl::sessionChecked()
     if (isExpired) {
         return refreshToken ();
     }
-    m_xmpp->connectToServer(
-        m_user->xmpp_jid,
-        m_user->password,
-        m_user->xmpp_host,
-        m_user->xmpp_port);
+
     // emit sessionChanged(false);
     return QtFuture::makeReadyValueFuture (true);
 }
@@ -63,6 +59,18 @@ bool SessionRepositoryImpl::logout()
     }
     return false;
 
+}
+
+void SessionRepositoryImpl::connectToXmpp()
+{
+    if (!m_user.has_value ()) {
+        return;
+    }
+    m_xmpp->connectToServer(
+        m_user->xmpp_jid,
+        m_user->password,
+        m_user->xmpp_host,
+        m_user->xmpp_port);
 }
 
 QFuture<bool> SessionRepositoryImpl::refreshToken()

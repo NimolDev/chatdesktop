@@ -17,6 +17,7 @@ public:
     virtual QFuture<bool> sessionChecked() = 0;
     virtual bool isSession() const = 0;
     virtual bool logout() = 0;
+    virtual void connectToXmpp() = 0;
 
 signals:
     void sessionChanged(bool logged);

@@ -25,6 +25,7 @@ public:
     QFuture<bool> sessionChecked() override;
     bool isSession() const override;
     bool logout() override;
+    void connectToXmpp() override;
 
 private:
     std::shared_ptr<core::xmpp::XmppManager> m_xmpp;

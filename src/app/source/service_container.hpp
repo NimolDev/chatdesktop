@@ -13,6 +13,13 @@ class ServiceContainer
     using ErasedFactory = std::function<std::shared_ptr<void>(ServiceContainer &)>;
 
 public:
+    void clear()
+    {
+        m_singletons.clear();
+        m_singletonFactories.clear();
+        m_factories.clear();
+    }
+
     template<typename T>
     void registerFactory(std::function<std::shared_ptr<T>(ServiceContainer &)> factory)
     {

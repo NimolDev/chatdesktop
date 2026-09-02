@@ -2,6 +2,7 @@
 
 
 #include <QTimer>
+#include <QThread>
 #include <QUuid>
 
 namespace core {
@@ -10,18 +11,55 @@ namespace xmpp {
 XmppManager::XmppManager(QObject *parent)
     : QObject(parent)
 {
-    qDebug() << "instantiate";
+    qRegisterMetaType<core::xmpp::Message>();
+    qRegisterMetaType<core::xmpp::Presence>();
+}
+
+void XmppManager::initialize()
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (m_client) {
+        return;
+    }
+    m_client = new QXmppClient(this);
     initializeHandlers ();
     initializeSignals ();
+
+    qDebug() << "XmppManager thread:"
+
+             << QThread::currentThread();
+
+    qDebug() << "QXmppClient thread:"
+
+             << m_client->thread();
 }
+
 
 XmppManager::ConnectionState XmppManager::connectionState() const noexcept
 {
-    return m_connectionState;
+    if (QThread::currentThread() == thread()) {
+        return m_connectionState;
+    }
+
+    ConnectionState state = ConnectionState::Disconnected;
+    QMetaObject::invokeMethod(
+        const_cast<XmppManager *>(this),
+        [this, &state]() { state = m_connectionState; },
+        Qt::BlockingQueuedConnection);
+    return state;
 }
 bool XmppManager::isConnected() const noexcept
 {
-    return m_client.isConnected ();
+    if (QThread::currentThread() == thread()) {
+        return m_client && m_client->isConnected();
+    }
+
+    bool connected = false;
+    QMetaObject::invokeMethod(
+        const_cast<XmppManager *>(this),
+        [this, &connected]() { connected = m_client && m_client->isConnected(); },
+        Qt::BlockingQueuedConnection);
+    return connected;
 }
 
 void XmppManager::connectToServer(
@@ -30,6 +68,17 @@ void XmppManager::connectToServer(
     const QString &host,
     quint16 port)
 {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, jid, password, host, port]() {
+                connectToServer(jid, password, host, port);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+
+    Q_ASSERT(m_client);
     const QString normalized_jid = jid.trimmed();
     if (normalized_jid.isEmpty()) {
         const QString error = QStringLiteral("XMPP JID cannot be empty.");
@@ -59,9 +108,9 @@ void XmppManager::connectToServer(
         .port = port
     };
 
-    if (m_client.state() != QXmppClient::DisconnectedState) {
+    if (m_client->state() != QXmppClient::DisconnectedState) {
         m_pendingConnection = parameters;
-        m_client.disconnectFromServer();
+        m_client->disconnectFromServer();
         return;
     }
 
@@ -94,14 +143,25 @@ void XmppManager::startConnection(const ConnectionParameters &parameters)
     updateState(ConnectionState::Connecting);
     setLastError({});
 
-    m_client.connectToServer(configuration, presence);
+    m_client->connectToServer(configuration, presence);
 }
 
 void XmppManager::closeConnection()
 {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            &XmppManager::closeConnection,
+            Qt::QueuedConnection);
+        return;
+    }
+
+    if (!m_client) {
+        return;
+    }
     m_pendingConnection.reset();
 
-    if (m_client.state() == QXmppClient::DisconnectedState) {
+    if (m_client->state() == QXmppClient::DisconnectedState) {
         updateState(ConnectionState::Disconnected);
         return;
     }
@@ -109,13 +169,22 @@ void XmppManager::closeConnection()
     QXmppPresence presence;
     presence.setType(QXmppPresence::Unavailable);
     presence.setStatusText(QStringLiteral("Offline"));
-    m_client.setClientPresence(presence);
-    m_client.disconnectFromServer();
+    m_client->setClientPresence(presence);
+    m_client->disconnectFromServer();
 }
 
 void XmppManager::sendMessage(const QString &receiver_id, const QString &message)
 {
-    if (m_client.state () != QXmppClient::ConnectedState) {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, receiver_id, message]() { sendMessage(receiver_id, message); },
+            Qt::QueuedConnection);
+        return;
+    }
+
+    Q_ASSERT(m_client);
+    if (m_client->state () != QXmppClient::ConnectedState) {
         qWarning() << "XMPP Client is not connected";
         return;
     }
@@ -132,25 +201,25 @@ void XmppManager::sendMessage(const QString &receiver_id, const QString &message
     msg.setId (QUuid::createUuid ().toString (QUuid::WithoutBraces));
     // QXmppStanza stanza;
 
-    m_client.send (std::move (msg));
+    m_client->send (std::move (msg));
 
 }
 
 
 void XmppManager::initializeHandlers()
 {
-    m_roster = m_client.findExtension<QXmppRosterManager>();
+    m_roster = m_client->QXmppClient::findExtension<QXmppRosterManager>();
     if (!m_roster) {
         qWarning() << "QXmppRosterManager not available";
     }
 
-    m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (&m_client, this);
+    m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (m_client, this);
 }
 
 void XmppManager::initializeSignals()
 {
     connect(
-        &m_client,
+        m_client,
         &QXmppClient::stateChanged,
         this,
         [this](QXmppClient::State state) {
@@ -166,7 +235,7 @@ void XmppManager::initializeSignals()
                 QXmppPresence presence;
                 presence.setType(QXmppPresence::Available);
                 presence.setStatusText(QStringLiteral("Online"));
-                m_client.clientPresence ();
+                m_client->clientPresence ();
                 break;
             }
             case QXmppClient::ConnectedState:
@@ -178,22 +247,22 @@ void XmppManager::initializeSignals()
         );
 
     connect (
-        &m_client,
+        m_client,
         &QXmppClient::connected,
         this,
         [this]() {
             setLastError ({});
-            m_currentJid = m_client.configuration ().jid ();
-            qInfo() << "XMPP connected: " << m_client.configuration ().jid ();
+            m_currentJid = m_client->configuration ().jid ();
+            qInfo() << "XMPP connected: " << m_client->configuration ().jid ();
             QXmppPresence presence(QXmppPresence::Available);
-            m_client.setClientPresence (presence);
-            m_client.setClientPresence (presence);
+            m_client->setClientPresence (presence);
+            m_client->setClientPresence (presence);
             emit connectedChanged ();
         }
         );
 
     connect(
-        &m_client,
+        m_client,
         &QXmppClient::disconnected,
         this,
         [this]() {
@@ -211,7 +280,7 @@ void XmppManager::initializeSignals()
 
             // Let QXmpp finish tearing down its socket before reconnecting.
             QTimer::singleShot(0, this, [this, parameters] {
-                if (m_client.state() == QXmppClient::DisconnectedState) {
+                if (m_client->state() == QXmppClient::DisconnectedState) {
                     startConnection(parameters);
                 } else {
                     m_pendingConnection = parameters;
@@ -262,26 +331,26 @@ void XmppManager::initializeSignals()
     //     );
 
     connect(
-        &m_client,
+        m_client,
         &QXmppClient::messageReceived,
         this,
         &XmppManager::onMessageReceived
         );
     connect(
-        &m_client,
+        m_client,
         &QXmppClient::presenceReceived,
         this,
         &XmppManager::onPresenceReceived
         );
     connect (
-        &m_client,
+        m_client,
         &QXmppClient::iqReceived,
         this,
         &XmppManager::onIQReceived
         );
 
 
-    auto *logger = m_client.logger();
+    auto *logger = m_client->logger();
 
     // logger->setLoggingType(QXmppLogger::StdoutLogging);
     logger->setMessageTypes(QXmppLogger::AnyMessage);
@@ -327,13 +396,33 @@ void XmppManager::onIQReceived(const QXmppIq &iq)
 
 QString XmppManager::lastError() const
 {
-    return m_lastError;
+    if (QThread::currentThread() == thread()) {
+        return m_lastError;
+    }
+
+    QString error;
+    QMetaObject::invokeMethod(
+        const_cast<XmppManager *>(this),
+        [this, &error]() { error = m_lastError; },
+        Qt::BlockingQueuedConnection);
+    return error;
 }
 
 QString XmppManager::currentJid() const
 {
-    return m_currentJid;
+    if (QThread::currentThread() == thread()) {
+        return m_currentJid;
+    }
+
+    QString jid;
+    QMetaObject::invokeMethod(
+        const_cast<XmppManager *>(this),
+        [this, &jid]() { jid = m_currentJid; },
+        Qt::BlockingQueuedConnection);
+    return jid;
 }
+
+
 
 void XmppManager::updateState(ConnectionState state)
 {

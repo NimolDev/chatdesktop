@@ -52,10 +52,6 @@ struct Presence
     }
 };
 
-// struct UserResponse
-// {
-
-// };
 
 class XmppManager final : public QObject
 {
@@ -81,6 +77,10 @@ public:
 
     // void connectToServer(const QString &jid, const QString &password);
 
+
+public slots:
+
+    void initialize();
     void connectToServer(
         const QString &jid,
         const QString &password,
@@ -97,9 +97,9 @@ signals:
     void connectionFailed();
     void connectedChanged();
     void lastErrorChanged();
+
     void messageReceived(const core::xmpp::Message &message);
     void presenceReceived(const core::xmpp::Presence &presence);
-    // void iqReceived()
 
 private slots:
     void onMessageReceived(const QXmppMessage &message);
@@ -120,7 +120,8 @@ private:
     void updateState(ConnectionState state);
     void setLastError(const QString &error);
 
-    QXmppClient m_client;
+private:
+    QXmppClient *m_client = nullptr;
     QXmppRosterManager *m_roster = nullptr;
 
     ConnectionState m_connectionState = ConnectionState::Disconnected;
@@ -135,6 +136,8 @@ private:
 } // namespace xmpp
 } // namespace core
 
+Q_DECLARE_METATYPE(core::xmpp::Message)
+Q_DECLARE_METATYPE(core::xmpp::Presence)
 
 
 #endif // CORE_XMPP_XMPP_MANAGER_HPP

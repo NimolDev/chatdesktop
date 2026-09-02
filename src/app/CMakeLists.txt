@@ -103,24 +103,6 @@ set_target_properties(ChatApp PROPERTIES
 # completed bundle for local development; distribution builds can disable this
 # and apply their Developer ID signature during packaging.
 
-# if(APPLE)
-#     option(CHATAPP_ADHOC_CODE_SIGN
-#         "Ad-hoc sign the completed macOS app bundle"
-#         ON
-#     )
-#     if(CHATAPP_ADHOC_CODE_SIGN)
-#         find_program(CHATAPP_CODESIGN_EXECUTABLE codesign REQUIRED)
-#         add_custom_command(TARGET ChatApp POST_BUILD
-#             COMMAND "${CHATAPP_CODESIGN_EXECUTABLE}"
-#                 --force
-#                 --deep
-#                 --sign -
-#                 "$<TARGET_BUNDLE_DIR:ChatApp>"
-#             COMMENT "Ad-hoc signing ChatApp.app for macOS services"
-#             VERBATIM
-#         )
-#     endif()
-# endif()
 
 if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
 
@@ -176,11 +158,9 @@ install(TARGETS ChatApp
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-qt_generate_deploy_qml_app_script(
+# qt_generate_deploy_qml_app_script(
+#     TARGET ChatApp
+#     OUTPUT_SCRIPT deploy_script
+# )
 
-    TARGET ChatApp
-    OUTPUT_SCRIPT deploy_script
-
-)
-
-install(SCRIPT ${deploy_script})
+# install(SCRIPT ${deploy_script})

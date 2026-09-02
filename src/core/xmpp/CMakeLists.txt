@@ -8,6 +8,7 @@ target_link_libraries(xmpp
     PUBLIC
         Qt6::Core
         Qt6::Network
+        # Qt6::Concurrent
         QXmppQt6
 )
 
