@@ -57,6 +57,7 @@ signals:
     // void userNamed(QString &user_name);
     void userChanged(const QString &name);
     void userNameChanged();
+    void messageReceived();
 
 
 private:

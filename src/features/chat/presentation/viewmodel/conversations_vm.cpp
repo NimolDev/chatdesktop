@@ -1,5 +1,7 @@
 #include "conversations_vm.hpp"
 
+#include <QTimer>
+
 
 ConversationsVM *ConversationsVM::s_instance = nullptr;
 
@@ -36,7 +38,15 @@ void ConversationsVM::setInstance(ConversationsVM *instance)
 
 void ConversationsVM::fetchConversations()
 {
-    m_watcher.setFuture (m_usecase->execute ());
+    auto future =  m_usecase->execute ();
+    m_watcher.setFuture (future);
+    m_isLoading = true;
+    emit isLoadingChanged ();
+}
+
+bool ConversationsVM::isLoading() const
+{
+    return m_isLoading;
 }
 
 int ConversationsVM::rowCount(const QModelIndex &parent) const
@@ -47,8 +57,6 @@ int ConversationsVM::rowCount(const QModelIndex &parent) const
         return 0;
     }
     return m_conversations.size();
-    // return 12;
-
 }
 
 QVariant ConversationsVM::data(const QModelIndex &index, int role) const
@@ -83,8 +91,20 @@ QHash<int, QByteArray> ConversationsVM::roleNames() const
 void ConversationsVM::onFinished()
 {
     auto conversations = m_watcher.result ();
-    beginResetModel ();
-    m_conversations = std::move (conversations);
-    endResetModel ();
+    QTimer::singleShot (
+        000, // 5s
+        this,
+        [this, conversations = std::move (conversations)]() mutable {
+            beginResetModel ();
+            m_conversations = std::move (conversations);
+            endResetModel ();
+            m_isLoading = false;
+            emit isLoadingChanged ();
+        }
+        );
+
+
+
+
 }
 

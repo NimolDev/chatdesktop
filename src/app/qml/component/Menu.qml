@@ -40,7 +40,7 @@ Page {
         switch(selectedIndex){
         case 1:
             tabLoader.sourceComponent = chatPage
-            HomeChatVM.visible = true
+            // HomeChatVM.visible = true
         }
     }
 
@@ -186,7 +186,7 @@ Page {
                                 Layout.preferredHeight: 45
                                 Layout.preferredWidth: 45
                                 // source: AppAssets.profile
-                                source: "https://photosvibes.com/wp-content/uploads/2026/05/shinchan-pic-3.jpg"
+                                source: AppAssets.profile
                                 borderWidth: 0
                                 Layout.alignment: Qt.AlignHCenter
                             }
@@ -254,8 +254,6 @@ Page {
                             }
                             onClicked: root.logoutClicked();
                         }
-
-
                     }
 
                     MenuSeparator {
@@ -281,12 +279,6 @@ Page {
           id: tabLoader
           Layout.fillWidth: true
           Layout.fillHeight: true
-          // sourceComponent: switch (root.selectedIndex) {
-          //                  case 1:
-          //                      // chatPage.visible = false
-          //                      // HomeChatVM.visible = true
-          //                      return chatPage
-          //                  }
         }
     }
 

@@ -137,13 +137,13 @@ void XmppManager::startConnection(const ConnectionParameters &parameters)
 
     configuration.setIgnoreSslErrors (true);
 
-    QXmppPresence presence;
-    presence.setType(QXmppPresence::Available);
-    presence.setStatusText(QStringLiteral("Online"));
+    // QXmppPresence presence;
+    // presence.setType(QXmppPresence::Available);
+    // presence.setStatusText(QStringLiteral("Online"));
     updateState(ConnectionState::Connecting);
     setLastError({});
 
-    m_client->connectToServer(configuration, presence);
+    m_client->connectToServer(configuration);
 }
 
 void XmppManager::closeConnection()
@@ -232,15 +232,14 @@ void XmppManager::initializeSignals()
                 break;
             case QXmppClient::ConnectingState: {
                 updateState (ConnectionState::Connecting);
-                QXmppPresence presence;
-                presence.setType(QXmppPresence::Available);
-                presence.setStatusText(QStringLiteral("Online"));
-                m_client->clientPresence ();
                 break;
             }
             case QXmppClient::ConnectedState:
                 updateState (ConnectionState::Connected);
                 // m_discovery->requestExtDiscoQuery (QStringLiteral("xabber.org"));
+                QXmppPresence presence;
+                presence.setType(QXmppPresence::Available);
+                presence.setStatusText(QStringLiteral("Online"));
                 break;
             }
         }
@@ -254,10 +253,6 @@ void XmppManager::initializeSignals()
             setLastError ({});
             m_currentJid = m_client->configuration ().jid ();
             qInfo() << "XMPP connected: " << m_client->configuration ().jid ();
-            QXmppPresence presence(QXmppPresence::Available);
-            m_client->setClientPresence (presence);
-            m_client->setClientPresence (presence);
-
             emit connectedChanged ();
         }
         );
@@ -367,14 +362,14 @@ void XmppManager::onMessageReceived(const QXmppMessage &message)
 
 void XmppManager::onPresenceReceived(const QXmppPresence &presence)
 {
-    // QString my_bare_jid = m_currentJid.section ("/",0,0);
-    // QString from_bare_jid = presence.from ().section ("/", 0,0);
-    // if (my_bare_jid == from_bare_jid) {
-    //     return;
-    // }
-    // const Presence pre = Presence::map (presence);
-    qDebug() << "Presence:" << presence.from ();
-    // emit presenceReceived (pre);
+    // Servers normally echo our initial presence. Ignore only this exact
+    // resource, while still accepting presence from our other devices.
+    if (presence.from() == m_currentJid) {
+        return;
+    }
+
+    const Presence mappedPresence = Presence::map(presence);
+    emit presenceReceived(mappedPresence);
 }
 
 void XmppManager::onIQReceived(const QXmppIq &iq)

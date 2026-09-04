@@ -25,6 +25,5 @@ void SessionUsecase::execute()
         emit sessionChanged(isSession);
     });
 }
-
 } // namespace usecase
 } // namespace domain

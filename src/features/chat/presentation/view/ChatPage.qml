@@ -34,14 +34,15 @@ Page {
             d.itemSelectedIndex = index
             chatPage.receiverId = userId
             chatPage.selectUserName = userName
-            messagingView.opacity = 1
-            messagingView.x = 0
+            loaderMessage.opacity = 1
+            loaderMessage.x = 0
             MessagingViewModel.fetchMessage(userId)
+
         }
 
         // There is nothing useful to freeze before the first conversation.
-        if (d.itemSelectedIndex === -1 || messagingView.width <= 0
-                || messagingView.height <= 0) {
+        if (d.itemSelectedIndex === -1 || loaderMessage.width <= 0
+                || loaderMessage.height <= 0) {
             transitionSnapshot.visible = false
             activateConversation()
             return
@@ -49,7 +50,7 @@ Page {
 
         // Freeze the current conversation into one GPU-backed image. The
         // expensive delegate tree can then change underneath without flashing.
-        const grabStarted = messagingView.grabToImage(function(result) {
+        const grabStarted = loaderMessage.grabToImage(function(result) {
             if (switchId !== d.switchId)
                 return
 
@@ -58,8 +59,8 @@ Page {
             transitionSnapshot.x = 0
             transitionSnapshot.visible = true
             activateConversation()
-        }, Qt.size(Math.ceil(messagingView.width),
-                   Math.ceil(messagingView.height)))
+        }, Qt.size(Math.ceil(loaderMessage.width),
+                   Math.ceil(loaderMessage.height)))
 
         // A grab can fail while the window is being resized or hidden. Do not
         // let that prevent the actual conversation switch.
@@ -130,25 +131,52 @@ Page {
         }
     }
 
-    ListUser {
-        id: userList
-
+    // >>>>>> conversation
+    Loader {
+        id: conversationLoader
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         width: d.sidebarWidth
-        itemHeight: d.userItemHeight
-        padding: AppLayouts.s_padding
-        isCompactMode: width < d.minimumExpandedWidth
-        model: ConversationsVM
-        onExpandRequested: chatPage.expandUserList()
-        onItemClicked: function (index, userName, userId) {
-            if (index === d.itemSelectedIndex) {
-                return
+        sourceComponent: { ConversationsVM.isLoading
+                           ? conversationLoading
+                           : conversationList
+        }
+
+    }
+    Component {
+        id: conversationList
+        ListUser {
+            id: userList
+            itemHeight: d.userItemHeight
+            padding: AppLayouts.s_padding
+            isCompactMode: width < d.minimumExpandedWidth
+            model: ConversationsVM
+            onExpandRequested: chatPage.expandUserList()
+            onItemClicked: function (index, userName, userId) {
+                if (index === d.itemSelectedIndex) {
+                    return
+                }
+                chatPage.showConversation(index, userName, userId)
             }
-            chatPage.showConversation(index, userName, userId)
         }
     }
+    Component {
+        id: conversationLoading
+        Rectangle {
+            color: Colors.background
+
+            Text {
+                text: "Loading"
+                font.family: Typography.family
+                font.pixelSize: Typography.title4
+                font.weight: Typography.medium
+                color: Colors.textPrimary
+                anchors.centerIn: parent
+            }
+        }
+    }
+    // <<<<<< conversation
 
     // -- Split Handle ---
     Rectangle {
@@ -235,32 +263,42 @@ Page {
             // anchors.fill: parent
         }
 
-        ListMessaging {
-            id: messagingView
+        Loader {
+            id: loaderMessage
 
-            // anchors.fill: parent
-            model: MessagingViewModel
-            userName: chatPage.selectUserName
-            isVisible: !MessagingViewModel.isLoading
-            onMessageSubmitted: msg => {
-                MessagingViewModel.sendMessage(chatPage.receiverId, msg);
-            }
-            onDeleteSelectedRequested:(indexes) => {
-                                          console.log("Delete Message",indexes);
-                                          MessagingViewModel.deleteMessage(indexes)
-                                      }
 
-            Connections {
-                target: chatPage
-                function onResetMessagingStateRequested() {
-                    messagingView.resetState();
-                }
-                function onNeedScrollToLast() {
-                    console.log("Message changed")
-                    messagingView.scrollMessageToLast();
+            active: d.itemSelectedIndex !== -1
+            sourceComponent: Component {
+                ListMessaging {
+                    id: messagingView
+
+                    // anchors.fill: parent
+                    model: MessagingViewModel
+                    userName: chatPage.selectUserName
+                    isVisible: !MessagingViewModel.isLoading
+                    onMessageSubmitted: msg => {
+                        MessagingViewModel.sendMessage(chatPage.receiverId, msg);
+                    }
+                    onDeleteSelectedRequested:(indexes) => {
+                                                  console.log("Delete Message",indexes);
+                                                  MessagingViewModel.deleteMessage(indexes)
+                                              }
+
+                    Connections {
+                        target: chatPage
+                        function onResetMessagingStateRequested() {
+                            messagingView.resetState();
+                        }
+                        function onNeedScrollToLast() {
+                            console.log("Message changed")
+                            messagingView.scrollMessageToLast();
+                        }
+                    }
                 }
             }
         }
+
+
     }
 
     Image {
@@ -283,7 +321,7 @@ Page {
             // Let ListView instantiate and position the incoming delegates
             // before removing the frozen outgoing conversation.
             Qt.callLater(function() {
-                messagingView.scrollMessageToLast()
+                chatPage.needScrollToLast()
                 incomingReveal.restart()
             })
         }

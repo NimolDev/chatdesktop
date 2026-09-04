@@ -38,7 +38,7 @@ Window {
         height: 120
         fillMode: Image.PreserveAspectFit
 
-        playing: true
+        playing: petWindow.visible
         speed: 2
     }
 

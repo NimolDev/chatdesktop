@@ -8,11 +8,19 @@ namespace macos {
 class Notification : public platform::Notification
 {
 public:
-    Notification();
-    // Notification interface
-public:
+    static Notification &instance();
+
+    Notification(const Notification &) = delete;
+    Notification &operator=(const Notification &) = delete;
+    Notification(Notification &&) = delete;
+    Notification &operator=(Notification &&) = delete;
+
     void show(const QString &title, const QString &message) override;
     void requestPermission() override;
+
+private:
+    Notification();
+    ~Notification() override = default;
 };
 
 } // namespace macos

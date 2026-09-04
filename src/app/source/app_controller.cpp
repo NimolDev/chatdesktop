@@ -30,6 +30,16 @@ AppController::AppController(
     //     );
 
     connect (
+
+        m_xmpp.get (),
+        &core::xmpp::XmppManager::messageReceived,
+        this,
+        [this](const core::xmpp::Message &message)  {
+            emit messageReceived ();
+
+        }
+        );
+    connect (
         m_session.get (),
         &domain::usecase::SessionUsecase::sessionChanged,
         this,

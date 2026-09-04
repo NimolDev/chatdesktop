@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include "utils/date_time_utils.hpp"
-#include "domain/entity/messags.hpp"
 
 MessagingViewModel *MessagingViewModel::s_instance = nullptr;
 
@@ -21,7 +20,7 @@ MessagingViewModel::MessagingViewModel(
         &domain::usecase::MessageUsecase::onMessagedReceived,
         this,
         [this](const domain::entity::MessageItem &payload) {
-            qDebug() << "MesaagingVM: Message received";
+
             // auto const message = messageMapping();
             // messageMapping (payload);
             if (normalizedId(payload.sender_id) == m_activeConversationId)
@@ -221,7 +220,7 @@ void MessagingViewModel::insertMessage(const domain::entity::MessageItem &payloa
     m_displayDates.append(core::utils::formateConversationDate(payload.body.timestamp));
     m_sections.append(sectionForDate(payload.body.timestamp));
     endInsertRows ();
-    emit messageChanged();
+    emit messageChanged ();
 }
 
 void MessagingViewModel::deleteMessage(QList<int> rows)
