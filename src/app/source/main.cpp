@@ -23,8 +23,10 @@
 #include "app_container.hpp"
 
 #ifdef Q_OS_MACOS
+#include "platform/macos/macos_menu_bar.hpp"
 #include "platform/macos/macos_tray_icon.hpp"
 #include "platform/macos/notification.hpp"
+#include "platform/macos/pet_window.hpp"
 #endif
 
 
@@ -91,6 +93,7 @@ void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
 
 void setupTrayIcon(QApplication &app, QWindow &window) {
 
+
 #ifdef Q_OS_MACOS
     // Permission UI must be requested after the app has entered its event loop.
     QTimer::singleShot(0, &app, []() {
@@ -102,12 +105,9 @@ void setupTrayIcon(QApplication &app, QWindow &window) {
 
 
 #ifdef Q_OS_MACOS
-    // A macOS status item exists only as long as its wrapper does.
-    static auto trayIcon = std::make_unique<MacosTrayIcon>(&app, &window);
-    trayIcon->setBadgeNumber(1000);
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
-        trayIcon.reset();
-    });
+    platform::macos::MacosMenuBar menuBar(&app, window);
+    MacosTrayIcon trayIcon(&app, window);
+    trayIcon.setBadgeNumber (99);
 #else
 
     app.setBadgeNumber(10);

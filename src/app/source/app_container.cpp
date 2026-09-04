@@ -3,7 +3,7 @@
 
 #include "constants/app_constants.hpp"
 #include "repository/conversations_repository_impl.hpp"
-#include "xmpp/xmpp_manager.hpp"
+
 #include "network/auth_interceptor.hpp"
 #include "network/network_client.hpp"
 #include "network/logging_interceptor.hpp"
@@ -24,10 +24,69 @@
 
 AppContainer::AppContainer()
 {
+    setupXmpp ();
     registerCoreService ();
     registerAppController ();
     registerAuthentication ();
     registerChat ();
+}
+
+AppContainer::~AppContainer()
+{
+    shutdownXmpp ();
+}
+
+void AppContainer::setupXmpp()
+{
+    m_xmppThread = new QThread();
+    m_xmppThread->setObjectName(QStringLiteral("XmppThread"));
+
+    auto *xmpp = new core::xmpp::XmppManager();
+    xmpp->moveToThread(m_xmppThread);
+    m_xmpp = std::shared_ptr<core::xmpp::XmppManager>(
+        xmpp,
+        [](core::xmpp::XmppManager *manager) {
+            QThread *ownerThread = manager->thread();
+            if (ownerThread == QThread::currentThread() || !ownerThread->isRunning()) {
+                delete manager;
+                return;
+            }
+            QMetaObject::invokeMethod(
+                manager,
+                [manager]() { delete manager; },
+                Qt::BlockingQueuedConnection);
+        });
+
+    QObject::connect(
+        m_xmppThread,
+        &QThread::started,
+        xmpp,
+        &core::xmpp::XmppManager::initialize);
+    m_xmppThread->start();
+}
+
+void AppContainer::shutdownXmpp()
+{
+    if (!m_xmppThread) {
+        return;
+    }
+
+    // Release every service that shares the manager before stopping its event
+    // loop, then destroy QXmppClient and its socket on XmppThread.
+    m_container.clear();
+    if (m_xmpp) {
+        QMetaObject::invokeMethod(
+            m_xmpp.get(),
+            &core::xmpp::XmppManager::closeConnection,
+            Qt::BlockingQueuedConnection);
+        m_xmpp.reset();
+    }
+
+    m_xmppThread->quit();
+    m_xmppThread->wait();
+
+    delete m_xmppThread;
+    m_xmppThread = nullptr;
 }
 
 void AppContainer::registerCoreService()
@@ -51,8 +110,8 @@ void AppContainer::registerCoreService()
         client->addInterceptor (c.resolve<core::network::logging::LoggingInterceptor> ());
         return client;
     });
-    m_container.registerSingleton<core::xmpp::XmppManager> ([](ServiceContainer &c) {
-        return std::make_shared<core::xmpp::XmppManager> ();
+    m_container.registerSingleton<core::xmpp::XmppManager> ([this](ServiceContainer &) {
+        return m_xmpp;
     });
 }
 

@@ -21,12 +21,8 @@ SessionUsecase::SessionUsecase(
 void SessionUsecase::execute()
 {
     m_repository->sessionChecked().then(this, [this](bool isSession) {
-        if (!isSession) {
-            emit sessionChanged(false);
-            return;
-        }
-        emit sessionChanged(true);
-        m_repository->connectXmpp();
+        m_repository->connectToXmpp ();
+        emit sessionChanged(isSession);
     });
 }
 

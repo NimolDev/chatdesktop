@@ -52,6 +52,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Sql
     Positioning
     Location
+    Concurrent
 )
 
 qt_standard_project_setup(REQUIRES 6.5)

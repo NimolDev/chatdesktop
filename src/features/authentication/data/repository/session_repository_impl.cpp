@@ -61,9 +61,10 @@ bool SessionRepositoryImpl::logout()
 
 }
 
-void SessionRepositoryImpl::connectXmpp()
+void SessionRepositoryImpl::connectToXmpp()
 {
-    if (!m_xmpp || !m_user) {
+    if (!m_user) {
+        qDebug() << "No user";
         return ;
     }
     m_xmpp->connectToServer(

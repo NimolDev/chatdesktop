@@ -28,13 +28,22 @@ ApplicationWindow {
     // property color dark: "#262626"
     // property color reallyLight: "#e7e7e7"
     property color light: Colors.primary
-
+<<<<<<< HEAD
+    // readonly property Window aboutDialog: aboutDialogLoader.item as Window
 
     Component.onCompleted: {
 
         // desktopPet.show()
         AppController.checkAuthentication()
     }
+=======
+    // color: "black"
+
+    readonly property Window aboutDialog: aboutDialogLoader.item as Window
+    menuBar:  Qt.platform.os === "osx" ? menuBar : null
+
+     Component.onCompleted: AppController.checkAuthentication()
+>>>>>>> window
 
     onClosing: function(close) {
         close.accepted = false
@@ -68,14 +77,14 @@ ApplicationWindow {
         }
     }
 
-    // PetWindow {
-    //     id: desktopPet
+    PetWindow {
+        id: desktopPet
 
-    //     visible: false
+        visible: false
 
-    //     x: 0
-    //     y: 0
-    // }
+        x: 0
+        y: 0
+    }
 
     // Loader {
     //     id: aboutDialogLoader

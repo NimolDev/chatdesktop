@@ -29,6 +29,7 @@ Page {
             if (switchId !== d.switchId)
                 return
 
+            MessagingViewModel.resetModel()
             chatPage.resetMessagingStateRequested()
             d.itemSelectedIndex = index
             chatPage.receiverId = userId

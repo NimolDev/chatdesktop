@@ -7,10 +7,14 @@ qt_add_executable(ChatApp
 if(APPLE)
     target_sources(ChatApp
         PRIVATE
+            platform/macos/macos_menu_bar.hpp
+            platform/macos/macos_menu_bar.mm
             platform/macos/macos_tray_icon.hpp
             platform/macos/macos_tray_icon.mm
             platform/macos/notification.hpp
             platform/macos/notification.mm
+            platform/macos/pet_window.hpp
+            platform/macos/pet_window.mm
 
     )
     target_link_libraries(ChatApp PRIVATE "-framework AppKit" "-framework UserNotifications")
@@ -52,6 +56,7 @@ qt_add_qml_module(ChatApp
         source/app_controller.hpp
         source/app_controller.cpp
         SOURCES platform/notification.hpp
+        QML_FILES qml/PetWindow.qml
 
 
     # RESOURCES Info.plist
@@ -102,24 +107,6 @@ set_target_properties(ChatApp PROPERTIES
 # completed bundle for local development; distribution builds can disable this
 # and apply their Developer ID signature during packaging.
 
-# if(APPLE)
-#     option(CHATAPP_ADHOC_CODE_SIGN
-#         "Ad-hoc sign the completed macOS app bundle"
-#         ON
-#     )
-#     if(CHATAPP_ADHOC_CODE_SIGN)
-#         find_program(CHATAPP_CODESIGN_EXECUTABLE codesign REQUIRED)
-#         add_custom_command(TARGET ChatApp POST_BUILD
-#             COMMAND "${CHATAPP_CODESIGN_EXECUTABLE}"
-#                 --force
-#                 --deep
-#                 --sign -
-#                 "$<TARGET_BUNDLE_DIR:ChatApp>"
-#             COMMENT "Ad-hoc signing ChatApp.app for macOS services"
-#             VERBATIM
-#         )
-#     endif()
-# endif()
 
 if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
 
@@ -175,11 +162,9 @@ install(TARGETS ChatApp
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-qt_generate_deploy_qml_app_script(
+# qt_generate_deploy_qml_app_script(
+#     TARGET ChatApp
+#     OUTPUT_SCRIPT deploy_script
+# )
 
-    TARGET ChatApp
-    OUTPUT_SCRIPT deploy_script
-
-)
-
-install(SCRIPT ${deploy_script})
+# install(SCRIPT ${deploy_script})

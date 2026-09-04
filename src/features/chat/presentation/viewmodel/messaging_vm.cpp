@@ -221,6 +221,7 @@ void MessagingViewModel::insertMessage(const domain::entity::MessageItem &payloa
     m_displayDates.append(core::utils::formateConversationDate(payload.body.timestamp));
     m_sections.append(sectionForDate(payload.body.timestamp));
     endInsertRows ();
+    emit messageChanged();
 }
 
 void MessagingViewModel::deleteMessage(QList<int> rows)
