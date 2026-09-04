@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
         }
         );
 
-    // auto vm = new CallVM();
+    auto vm =  new CallVM();
     const int result = app.exec ();
     core::logging::Logger::shutdown ();
     return result;

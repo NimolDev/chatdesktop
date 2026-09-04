@@ -16,7 +16,7 @@ void SdpObserver::OnSuccess(webrtc::SessionDescriptionInterface *desc)
     if (m_onSuccess) {
         m_onSuccess(std::move(description));
     }
-    qWarning() << "SDP :" << desc->ToString ();
+
 }
 
 void SdpObserver::OnFailure(webrtc::RTCError error)

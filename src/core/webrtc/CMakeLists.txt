@@ -2,9 +2,9 @@ add_library(webrtc STATIC
     webrtc_client.hpp webrtc_client.cpp
     peer_connection_observer.hpp peer_connection_observer.cpp
     sdp_observer.hpp sdp_observer.cpp
+    set_remote_description_observer.hpp set_remote_description_observer.cpp
 
 )
-
 add_library(core::webrtc ALIAS webrtc)
 
 # The imported WebRTC archive is built with is_debug=false. Keep code that

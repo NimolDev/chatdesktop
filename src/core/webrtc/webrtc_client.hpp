@@ -6,8 +6,9 @@
 
 #include "peer_connection_observer.hpp"
 #include "sdp_observer.hpp"
+#include "set_remote_description_observer.hpp"
 
-#include "api/peer_connection_interface.h"
+// #include "api/peer_connection_interface.h"
 #include "api/video/video_frame.h"
 
 
@@ -27,16 +28,12 @@ public:
 
     bool initialize();
 
-    // void startCall(const QString &user_id);
-    // void handleOffer(const QString &sdp);
-
-    // void addIceCandidate(
-    //     const QString *mid,
-    //     int mlineIndex,
-    //     const QString &candidate);
     bool createPeerConnection();
 
     void createOffer();
+    void createAnswer();
+    bool setRemoteSdp(const QString &type, const QString &sdp);
+
 
     // Delivers a captured frame to the local WebRTC video track. This may be
     // called from a capture thread after createPeerConnection() succeeds.
@@ -63,6 +60,7 @@ private:
 
     std::unique_ptr<core::rtc::PeerConnectionObserver> m_peerObserver;
     webrtc::scoped_refptr<core::rtc::SdpObserver> m_sdpObserver;
+    webrtc::scoped_refptr<core::rtc::SetRemoteDescriptionObserver> m_remoteSdpObserver;
 
 };
 

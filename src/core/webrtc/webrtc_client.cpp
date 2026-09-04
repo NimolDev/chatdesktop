@@ -239,6 +239,7 @@ void WebrtcClient::createOffer()
                         emit self->localSdpCreated(type, offer);
                     });
 
+            LOG_INFO(QStringLiteral ("SDP Offer: %1").arg (offer));
             self->m_peerConnection->SetLocalDescription(
                 std::move(description), std::move(setObserver));
         },
@@ -250,6 +251,106 @@ void WebrtcClient::createOffer()
     m_peerConnection->CreateOffer(
         m_sdpObserver.get(),
         webrtc::PeerConnectionInterface::RTCOfferAnswerOptions{});
+}
+
+void WebrtcClient::createAnswer()
+{
+    webrtc::AudioOptions options;
+    auto audioSource = m_factory->CreateAudioSource(options);
+    auto audioTrack = m_factory->CreateAudioTrack(
+        "audio_track", audioSource.get());
+
+    auto addTrackResult = m_peerConnection->AddTrack(
+        audioTrack, {"stream_id"});
+    if (!addTrackResult.ok()) {
+        LOG_WARNING(QStringLiteral("Failed to add audio track: %1")
+                        .arg(QString::fromUtf8(addTrackResult.error().message())));
+        return;
+    }
+
+    d->videoSource = webrtc::make_ref_counted<LocalVideoTrackSource>();
+    auto videoTrack = m_factory->CreateVideoTrack(
+        d->videoSource, "video_track");
+    if (!videoTrack) {
+        LOG_WARNING("Failed to create video track");
+        return ;
+    }
+
+    auto addVideoTrackResult = m_peerConnection->AddTrack(
+        videoTrack, {"stream_id"});
+    if (!addVideoTrackResult.ok()) {
+        LOG_WARNING(QStringLiteral("Failed to add video track: %1")
+                        .arg(QString::fromUtf8(
+                            addVideoTrackResult.error().message())));
+        return ;
+    }
+
+    const QPointer<WebrtcClient> self(this);
+    m_sdpObserver = webrtc::make_ref_counted<core::rtc::SdpObserver>(
+        [self](std::unique_ptr<webrtc::SessionDescriptionInterface> description) {
+            if (!self || !self->m_peerConnection || !description) {
+                return;
+            }
+
+            std::string sdp;
+            if (!description->ToString(&sdp)) {
+                LOG_WARNING("Failed to serialize the local SDP offer");
+                return;
+            }
+
+            const QString type = QString::fromStdString(description->type());
+            const QString offer = QString::fromStdString(sdp);
+            auto setObserver =
+                webrtc::make_ref_counted<SetLocalDescriptionObserver>(
+                    [self, type, offer](webrtc::RTCError error) {
+                        if (!self) {
+                            return;
+                        }
+                        if (!error.ok()) {
+                            LOG_WARNING(QStringLiteral(
+                                            "Failed to set local description: %1")
+                                            .arg(QString::fromUtf8(
+                                                error.message())));
+                            return;
+                        }
+
+                        emit self->localSdpCreated(type, offer);
+                    });
+
+            LOG_INFO(QStringLiteral ("SDP Answer: %1").arg (offer));
+            self->m_peerConnection->SetLocalDescription(
+                std::move(description), std::move(setObserver));
+        },
+        [](const webrtc::RTCError &error) {
+            LOG_WARNING(QStringLiteral("Failed to create SDP Answer: %1")
+                            .arg(QString::fromUtf8(error.message())));
+        });
+
+
+    m_peerConnection->CreateAnswer (m_sdpObserver.get (),
+                                   webrtc::PeerConnectionInterface::RTCOfferAnswerOptions{});
+
+
+}
+
+bool WebrtcClient::setRemoteSdp(const QString &type, const QString &sdp)
+{
+    if (!m_peerConnection) {
+        LOG_WARNING ("PeerConnection is null");
+        return false;
+    }
+    webrtc::SdpParseError parseError;
+
+    auto sdpType = webrtc::SdpTypeFromString (type.toStdString ());
+    std::unique_ptr<webrtc::SessionDescriptionInterface> description = webrtc::CreateSessionDescription (sdpType.value (), sdp.toStdString (), &parseError);
+    if (!description) {
+        LOG_WARNING (QStringLiteral ("Failed to parse remote SDP: %1").arg (QString::fromStdString (parseError.description)));
+        return false;
+    }
+    m_remoteSdpObserver = webrtc::make_ref_counted<core::rtc::SetRemoteDescriptionObserver> ();
+
+    m_peerConnection->SetRemoteDescription (m_remoteSdpObserver.get (), description.release ());
+    return true;
 }
 
 bool WebrtcClient::pushVideoFrame(const webrtc::VideoFrame &frame)
