@@ -24,8 +24,8 @@ void SessionUsecase::execute()
         m_repository->connectToXmpp ();
         emit sessionChanged(isSession);
     });
-}
 
+}
 
 } // namespace usecase
 } // namespace domain

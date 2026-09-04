@@ -28,19 +28,25 @@ public:
     static ConversationsVM *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     static void setInstance(ConversationsVM *instance);
 
+    Q_PROPERTY(bool isLoading READ isLoading NOTIFY isLoadingChanged FINAL)
+
     Q_INVOKABLE void fetchConversations();
 
-    // QAbstractItemModel interface
+    bool isLoading() const;
+
 public:
     int rowCount(const QModelIndex &parent) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
 signals:
-
+    void isLoadingChanged();
+private:
+    void onFinished();
+    bool m_isLoading;
 private:
 
-    void onFinished();
+
     static ConversationsVM *s_instance;
     std::shared_ptr<domain::usecase::ConversationsUsecase> m_usecase;
 

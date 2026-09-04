@@ -29,7 +29,7 @@ HomeChatVM::HomeChatVM(
         &domain::repository::MessageRepository::messageReceived,
         this,
         [this](const domain::entity::MessageItem &payload) {
-            // qDebug() << "VM: Message received:"<< payload.content.text;
+            emit messageReceived (payload);
         }
         );
 

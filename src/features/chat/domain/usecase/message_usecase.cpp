@@ -16,7 +16,6 @@ MessageUsecase::MessageUsecase(
         this,
         [this](const domain::entity::MessageItem &payload) {
             const QString id = QString(payload.sender_id).remove(QLatin1Char('-'));
-            qDebug() << "Message from: "<< payload.sender_id;
              if (id == m_userListener) {
                 domain::entity::MessageItem newPayload = payload;
                 const QString currentUserId = QString(m_repository->currentUserId())

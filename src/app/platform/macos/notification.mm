@@ -105,6 +105,12 @@ Notification::Notification()
     installNotificationDelegate();
 }
 
+Notification &Notification::instance()
+{
+    static Notification notification;
+    return notification;
+}
+
 
 
 void Notification::show(const QString &title, const QString &message)

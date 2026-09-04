@@ -132,6 +132,7 @@ target_link_libraries(ChatApp
         core::application
         core::storage
         core::utils
+        core::logging
         constants
         resources
         localization
@@ -139,6 +140,7 @@ target_link_libraries(ChatApp
         ui
         authentication
         chat
+        voip
 )
 
 if(WIN32)

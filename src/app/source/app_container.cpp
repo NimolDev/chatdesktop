@@ -193,6 +193,56 @@ void AppContainer::registerChat()
     m_container.registerSingleton<HomeChatVM> ([](ServiceContainer &c) {
         return std::make_shared<HomeChatVM> (c.resolve<domain::repository::MessageRepository> ());
     });
-    HomeChatVM::setInstance (m_container.resolve<HomeChatVM> ().get ());
+
+    home_chat =  m_container.resolve<HomeChatVM> ().get ();
+    HomeChatVM::setInstance (home_chat);
+
+    // QObject::connect (
+    //     home_chat,
+    //     &HomeChatVM::messageReceived,
+    //     this,
+    //     [this](const domain::entity::MessageItem &payload)  {
+
+    //     }
+    //     );
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

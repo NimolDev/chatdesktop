@@ -32,6 +32,8 @@ public:
 signals:
 
     void visibleChanged();
+    void messageReceived(const domain::entity::MessageItem &item);
+
 
 private:
    static HomeChatVM *s_instance;

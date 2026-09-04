@@ -48,12 +48,13 @@ Item {
 
     Image {
         anchors.fill: parent
-        source: "qrc:/background/background.png"
+        source: body.visible ? "qrc:/background/background.png" : ""
         fillMode: Image.Tile
         sourceSize: Qt.size(512, 512)
         smooth: false
         mipmap: true
-        asynchronous: false
+        asynchronous: true
+        cache: true
     }
 
     ListView {

@@ -8,7 +8,7 @@ namespace platform {
 class Notification
 {
 public:
-    ~Notification() = default;
+    virtual ~Notification() = default;
 
     virtual void requestPermission() =0;
     virtual void show(

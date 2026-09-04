@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-// import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Window
 
@@ -22,16 +21,8 @@ ApplicationWindow {
     visible: true
     title: AppController.userName
 
-    property bool lightMode: Application.styleHints.colorScheme === Qt.Light
-    property color reallyDark: "#1f1f1f"
-    property color dark: "#262626"
-    property color reallyLight: "#e7e7e7"
-    property color light: Colors.primary
-    // readonly property Window aboutDialog: aboutDialogLoader.item as Window
 
     Component.onCompleted: {
-
-        // desktopPet.show()
         AppController.checkAuthentication()
     }
 
@@ -52,8 +43,7 @@ ApplicationWindow {
                  pageLoader.sourceComponent = loginPage
                 break
             default:
-                pageLoader.sourceComponent = chatPage
-
+                pageLoader.sourceComponent = mainWindow
                 break
             }
         }
@@ -62,7 +52,7 @@ ApplicationWindow {
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
-            pageLoader.sourceComponent = chatPage
+            // pageLoader.sourceComponent = mainWindow
             window.title = LoginVM.userName
         }
     }
@@ -76,17 +66,7 @@ ApplicationWindow {
         y: 0
     }
 
-    // Loader {
-    //     id: aboutDialogLoader
-    //     active: false
-    //     sourceComponent: Component {
-    //         AboutDialog {
-    //             onClosing: Qt.callLater(function() {
-    //                 aboutDialogLoader.active = false
-    //             })
-    //         }
-    //     }
-    // }
+
 
     AboutDialog {
         id: aboutWindow
@@ -94,15 +74,28 @@ ApplicationWindow {
         onClosing: Qt.callLater(function() {
             // aboutDialogLoader.active = false
             aboutWindow.hide()
-
         })
     }
 
     Loader {
         id: pageLoader
         anchors.fill: parent
+        sourceComponent: loadingPage
     }
+    Component {
+        id: loadingPage
 
+        Page {
+            background: Rectangle {
+                color: Colors.background
+            }
+
+            BusyIndicator {
+                anchors.centerIn: parent
+                running: true
+            }
+        }
+    }
     Component {
         id: loginPage
         LoginView {
@@ -114,10 +107,10 @@ ApplicationWindow {
         }
     }
     Component {
-        id: chatPage
+        id: mainWindow
 
         AppComponent.Menu {
-            visible: pageLoader.sourceComponent == chatPage ? true : false
+            visible: pageLoader.sourceComponent == mainWindow ? true : false
             onLogoutClicked: {
                 AppController.logout()
                 pageLoader.sourceComponent = loginPage
