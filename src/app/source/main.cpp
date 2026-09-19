@@ -208,9 +208,9 @@ int main(int argc, char *argv[])
     trayIcon->show();
 
     const auto restoreWindow = [&window]() {
-        window.show();
-        window.raise();
-        window.requestActivate();
+        window->show();
+        window->raise();
+        window->requestActivate();
     };
 
     QObject::connect(
