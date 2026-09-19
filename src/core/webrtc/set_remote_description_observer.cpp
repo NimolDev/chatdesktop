@@ -4,7 +4,10 @@
 
 void core::rtc::SetRemoteDescriptionObserver::OnSuccess()
 {
-    qDebug() << "Remote session description set succeessfully";
+    qDebug() << "Remote session description set successfully";
+    if (m_onSuccess) {
+        m_onSuccess();
+    }
 }
 
 void core::rtc::SetRemoteDescriptionObserver::OnFailure(webrtc::RTCError error)

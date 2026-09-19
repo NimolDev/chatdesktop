@@ -274,6 +274,11 @@ Page {
                     // anchors.fill: parent
                     model: MessagingViewModel
                     userName: chatPage.selectUserName
+                    onCallRequested: {
+                        if (chatPage.receiverId) {
+                            MessagingViewModel.requestCall(chatPage.receiverId, chatPage.selectUserName)
+                        }
+                    }
                     isVisible: !MessagingViewModel.isLoading
                     onMessageSubmitted: msg => {
                         MessagingViewModel.sendMessage(chatPage.receiverId, msg);

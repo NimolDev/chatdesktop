@@ -31,5 +31,12 @@ QtObject {
     readonly property url icBellSlash: "qrc:/icons/bell.slash.png"
     readonly property url icNoSign: "qrc:/icons/nosign.png"
     readonly property url icClose: "qrc:/icons/xmark.png"
+    readonly property url icPin: "qrc:/icons/pin.png"
+    readonly property url icPinSlash: "qrc:/icons/pin.slash.png"
+    readonly property url icPinFill: "qrc:/icons/pin.fill.png"
+    readonly property url icPhoneDown: "qrc:/icons/phone.down.png"
+    readonly property url icSpeaker: "qrc:/icons/speaker.png"
+    readonly property url icSpeakderSlash: "qrc:/icons/speaker.slash.png"
+    readonly property url icMicrphoneSlahs: "qrc:/icons/microphone.slash.png"
 
 }

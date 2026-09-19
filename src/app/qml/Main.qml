@@ -7,6 +7,7 @@ import QtQuick.Window
 import Localization
 import Theme
 import Features.Auth
+import Features.Chat
 import ChatApp
 
 import "component" as AppComponent
@@ -20,7 +21,6 @@ ApplicationWindow {
     minimumHeight: AppLayouts.minHeight
     visible: true
     title: AppController.userName
-
 
     Component.onCompleted: {
         AppController.checkAuthentication()
@@ -52,20 +52,10 @@ ApplicationWindow {
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
-            // pageLoader.sourceComponent = mainWindow
+            pageLoader.sourceComponent = mainWindow
             window.title = LoginVM.userName
         }
     }
-
-    PetWindow {
-        id: desktopPet
-
-        visible: false
-
-        x: 0
-        y: 0
-    }
-
 
 
     AboutDialog {

@@ -19,10 +19,9 @@
 
 #include "storage/database_manager.hpp"
 #include "app_container.hpp"
+#include "call_coordinator.hpp"
 
 #include "logging/logger.hpp"
-
-#include "voip/presentation/viewmodel/call_vm.hpp"
 
 #ifdef Q_OS_MACOS
 #include "platform/macos/macos_menu_bar.hpp"
@@ -113,15 +112,16 @@ int main(int argc, char *argv[])
     // when an alert is clicked. Stop that second process before it constructs
     // another QML engine/window. Keep the lock alive for the entire main().
 
-    const QString instanceLockPath = QDir(
-        QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-        ).filePath(core::application::AppInfo::bundleIdentifier()
-                   + QStringLiteral(".lock"));
-    QLockFile instanceLock(instanceLockPath);
-    if (!instanceLock.tryLock()) {
-        qInfo() << "ChatApp is already running; refusing duplicate launch";
-        return EXIT_SUCCESS;
-    }
+    // const QString instanceLockPath = QDir(
+    //     QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+    //     ).filePath(core::application::AppInfo::bundleIdentifier()
+    //                + QStringLiteral(".lock"));
+    // QLockFile instanceLock(instanceLockPath);
+    // if (!instanceLock.tryLock()) {
+    //     qInfo() << "ChatApp is already running; refusing duplicate launch";
+    //     return EXIT_SUCCESS;
+    // }
+
     app.setQuitOnLastWindowClosed (false);
 
     // Container-owned QML singletons must outlive the QML engine. Local
@@ -130,6 +130,8 @@ int main(int argc, char *argv[])
     AppContainer app_container;
     QQmlApplicationEngine engine;
     appEngineRegister (app, engine);
+    // Destroy the coordinator and its windows before the QML engine.
+    CallCoordinator callCoordinator(app_container, engine);
 
     // set app to dark mode only
     QStyleHints *styleHints = QGuiApplication::styleHints();
@@ -169,23 +171,8 @@ int main(int argc, char *argv[])
     MacosTrayIcon trayIcon(&app, window);
     trayIcon.setBadgeNumber (99);
 
-    // Defer until QML has created the native backing window. Reapplying when
-    // visibility changes also covers Qt recreating it after a hide/show cycle.
-    // if (auto *petWindow = engine.rootObjects().constFirst()->findChild<QWindow *>(
-    //         QStringLiteral("desktopPetWindow"))) {
-    //     const auto configurePet = [petWindow]() {
-    //         platform::macos::configurePetWindow(petWindow);
-    //     };
-    //     QObject::connect(petWindow, &QWindow::visibleChanged, &app,
-    //                      [configurePet](bool visible) {
-    //                          if (visible) {
-    //                              QTimer::singleShot(0, configurePet);
-    //                          }
-    //                      });
-    //     QTimer::singleShot(0, configurePet);
-    // } else {
-    //     qWarning() << "Desktop pet window was not found";
-    // }
+
+
 
 #else
 
@@ -271,7 +258,7 @@ int main(int argc, char *argv[])
         }
         );
 
-    auto vm =  new CallVM();
+    // auto vm =  new CallVM();
     const int result = app.exec ();
     core::logging::Logger::shutdown ();
     return result;

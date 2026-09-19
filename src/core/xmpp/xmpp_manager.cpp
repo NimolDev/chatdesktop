@@ -24,13 +24,12 @@ void XmppManager::initialize()
     m_client = new QXmppClient(this);
     initializeHandlers ();
     initializeSignals ();
+    emit clientInitialized(m_client);
 
     qDebug() << "XmppManager thread:"
-
              << QThread::currentThread();
 
     qDebug() << "QXmppClient thread:"
-
              << m_client->thread();
 }
 
@@ -60,6 +59,15 @@ bool XmppManager::isConnected() const noexcept
         [this, &connected]() { connected = m_client && m_client->isConnected(); },
         Qt::BlockingQueuedConnection);
     return connected;
+}
+void XmppManager::requestExternalService()
+{
+    if (QThread::currentThread () != thread()) {
+        QMetaObject::invokeMethod (this,
+                                  &XmppManager::requestExternalService,
+                                  Qt::QueuedConnection);
+    }
+    m_discovery->requestExtDiscoQuery (QStringLiteral ("localhost"));
 }
 
 void XmppManager::connectToServer(
@@ -104,7 +112,8 @@ void XmppManager::connectToServer(
     const ConnectionParameters parameters {
         .jid = normalized_jid,
         .password = password,
-        .host = host.trimmed(),
+        // .host = host.trimmed(),
+        .host  = "172.16.28.253",
         .port = port
     };
 
@@ -137,13 +146,13 @@ void XmppManager::startConnection(const ConnectionParameters &parameters)
 
     configuration.setIgnoreSslErrors (true);
 
-    // QXmppPresence presence;
-    // presence.setType(QXmppPresence::Available);
-    // presence.setStatusText(QStringLiteral("Online"));
+    QXmppPresence presence;
+    presence.setType(QXmppPresence::Available);
+    presence.setStatusText(QStringLiteral("Online"));
     updateState(ConnectionState::Connecting);
     setLastError({});
 
-    m_client->connectToServer(configuration);
+    m_client->connectToServer(configuration, presence);
 }
 
 void XmppManager::closeConnection()
@@ -205,15 +214,17 @@ void XmppManager::sendMessage(const QString &receiver_id, const QString &message
 
 }
 
-
 void XmppManager::initializeHandlers()
 {
     m_roster = m_client->QXmppClient::findExtension<QXmppRosterManager>();
     if (!m_roster) {
         qWarning() << "QXmppRosterManager not available";
     }
-
-    m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (m_client, this);
+    // m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (m_client, this);
+    // connect(m_discovery.get (),
+    //         &core::xmpp::XmppServiceDiscovery::externalServiceReceived,
+    //         this,
+    //         &XmppManager::externalServiceReceived);
 }
 
 void XmppManager::initializeSignals()
@@ -236,10 +247,11 @@ void XmppManager::initializeSignals()
             }
             case QXmppClient::ConnectedState:
                 updateState (ConnectionState::Connected);
-                // m_discovery->requestExtDiscoQuery (QStringLiteral("xabber.org"));
-                QXmppPresence presence;
-                presence.setType(QXmppPresence::Available);
-                presence.setStatusText(QStringLiteral("Online"));
+                // m_discovery->requestExtDiscoQuery (QStringLiteral("localhost"));
+                // QXmppPresence presence;
+                // presence.setType(QXmppPresence::Available);
+                // presence.setStatusText(QStringLiteral("Online"));
+                // m_client->setClientPresence(presence);
                 break;
             }
         }
@@ -348,7 +360,7 @@ void XmppManager::initializeSignals()
 
     auto *logger = m_client->logger();
 
-    // logger->setLoggingType(QXmppLogger::StdoutLogging);
+    logger->setLoggingType(QXmppLogger::StdoutLogging);
     logger->setMessageTypes(QXmppLogger::AnyMessage);
 }
 
@@ -357,6 +369,11 @@ void XmppManager::initializeSignals()
 void XmppManager::onMessageReceived(const QXmppMessage &message)
 {
     const Message msg = Message::map (message);
+
+    if (message.body().isEmpty ()) {
+          qWarning()  << "Message body is empty";
+          return;
+    }
     emit messageReceived (msg);
 }
 
@@ -368,25 +385,27 @@ void XmppManager::onPresenceReceived(const QXmppPresence &presence)
         return;
     }
 
+
+    qDebug() << "Presene: "<< presence.from ();
     const Presence mappedPresence = Presence::map(presence);
     emit presenceReceived(mappedPresence);
 }
 
 void XmppManager::onIQReceived(const QXmppIq &iq)
 {
-    qDebug() << "---- XmppIQ Received -----";
-    qDebug() << "From: " << iq.from ();
-    qDebug() << "To: " << iq.to ();
-    qDebug() << "Type: " << iq.type ();
-    const QXmppElementList extensions = iq.extensions();
+    // qDebug() << "---- XmppIQ Received -----";
+    // qDebug() << "From: " << iq.from ();
+    // qDebug() << "To: " << iq.to ();
+    // qDebug() << "Type: " << iq.type ();
+    // const QXmppElementList extensions = iq.extensions();
 
-    qDebug() << "Extension count:" << extensions.size();
+    // qDebug() << "Extension count:" << extensions.size();
 
-    for (const QXmppElement &extension : extensions) {
-        qDebug() << "Tag:" << extension.tagName();
-        qDebug() << "Namespace:" << extension.attributeNames ();
-        qDebug() << "Value:" << extension.value();
-    }
+    // for (const QXmppElement &extension : extensions) {
+    //     qDebug() << "Tag:" << extension.tagName();
+    //     qDebug() << "Namespace:" << extension.attributeNames ();
+    //     qDebug() << "Value:" << extension.value();
+    // }
 }
 
 

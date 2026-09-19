@@ -1,24 +1,10 @@
 qt_add_executable(ChatApp
     MACOSX_BUNDLE
     source/main.cpp
+    coordinators/call_coordinator.hpp
+    coordinators/call_coordinator.cpp
     ${CMAKE_SOURCE_DIR}/resources/Resources.qrc
 )
-
-if(APPLE)
-    target_sources(ChatApp
-        PRIVATE
-            platform/macos/macos_menu_bar.hpp
-            platform/macos/macos_menu_bar.mm
-            platform/macos/macos_tray_icon.hpp
-            platform/macos/macos_tray_icon.mm
-            platform/macos/notification.hpp
-            platform/macos/notification.mm
-            platform/macos/pet_window.hpp
-            platform/macos/pet_window.mm
-
-    )
-    target_link_libraries(ChatApp PRIVATE "-framework AppKit" "-framework UserNotifications")
-endif()
 
 target_compile_definitions(ChatApp
     PRIVATE
@@ -27,6 +13,7 @@ target_compile_definitions(ChatApp
 target_include_directories(ChatApp
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/source"
+        "${CMAKE_CURRENT_SOURCE_DIR}/coordinators"
         "${CMAKE_SOURCE_DIR}"
         "${CMAKE_SOURCE_DIR}/third_party"
         "${CMAKE_SOURCE_DIR}/src/shared"
@@ -46,6 +33,8 @@ protect_qml_files(${CHATAPP_QML_FILES})
 qt_add_qml_module(ChatApp
     URI ChatApp
     VERSION 1.0
+    IMPORTS Features.Voip
+    DEPENDENCIES Features.Chat
     QML_FILES
         ${CHATAPP_QML_FILES}
 
@@ -55,7 +44,6 @@ qt_add_qml_module(ChatApp
         source/app_container.cpp
         source/app_controller.hpp
         source/app_controller.cpp
-        SOURCES platform/notification.hpp
         QML_FILES qml/PetWindow.qml
 
 
@@ -91,7 +79,7 @@ set_target_properties(ChatApp PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION "${APP_BUILD_NUMBER}"
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST
-        "${CMAKE_CURRENT_SOURCE_DIR}/platform/macos/Info.plist"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/macos/Info.plist"
 
     # MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
@@ -103,6 +91,34 @@ set_target_properties(ChatApp PROPERTIES
 # completed bundle for local development; distribution builds can disable this
 # and apply their Developer ID signature during packaging.
 
+
+if(APPLE)
+    set_property(TARGET ChatApp APPEND PROPERTY BUILD_RPATH
+        "@executable_path/../Frameworks")
+    set_property(TARGET ChatApp APPEND PROPERTY INSTALL_RPATH
+        "@executable_path/../Frameworks")
+    # Copy before the bundle is signed, so the embedded library is sealed too.
+    add_custom_command(TARGET ChatApp POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:webrtc>"
+            "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks/$<TARGET_FILE_NAME:webrtc>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:QXmppQt6>"
+            "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks/$<TARGET_SONAME_FILE_NAME:QXmppQt6>"
+        VERBATIM
+    )
+endif()
+
+# Populate QML imports for build-tree macOS bundles before signing them.
+# Also generate the deployment script used by cmake --install.
+qt_generate_deploy_qml_app_script(
+    TARGET ChatApp
+    OUTPUT_SCRIPT deploy_script
+    MACOS_BUNDLE_POST_BUILD
+    NO_UNSUPPORTED_PLATFORM_ERROR
+)
 
 if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
 
@@ -133,6 +149,7 @@ target_link_libraries(ChatApp
         core::storage
         core::utils
         core::logging
+        core::platform
         constants
         resources
         localization
@@ -160,9 +177,4 @@ install(TARGETS ChatApp
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-# qt_generate_deploy_qml_app_script(
-#     TARGET ChatApp
-#     OUTPUT_SCRIPT deploy_script
-# )
-
-# install(SCRIPT ${deploy_script})
+install(SCRIPT ${deploy_script})

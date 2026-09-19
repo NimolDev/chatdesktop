@@ -1,35 +1,46 @@
-set(WEBRTC_SOURCE
-    "/Users/nimol/Documents/WEB_RTC/libwebrtc_build/src"
-)
 
-set(WEBRTC_DEPOT_SOURCE
+if(APPLE)
+set(WEBRTC_SOURCE
     "/Users/nimol/Documents/WEB_RTC/ios/webrtc/src"
 )
 
-set(WEBRTC_BUILD
-    "${WEBRTC_DEPOT_SOURCE}/out/Release-mac-arm64"
-)
+    # Select the archive for the target, including cross-builds on Apple Silicon.
+    if(CMAKE_OSX_ARCHITECTURES)
+        set(WEBRTC_TARGET_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+    else()
+        set(WEBRTC_TARGET_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
 
-set(WEBRTC_LIBRARY
-    "${CMAKE_CURRENT_LIST_DIR}/lib/mac/arm64/libwebrtc.a"
-)
+    if(WEBRTC_TARGET_ARCH STREQUAL "arm64")
+        set(WEBRTC_ARCH_DIR "arm64")
+    elseif(WEBRTC_TARGET_ARCH STREQUAL "x86_64")
+        set(WEBRTC_ARCH_DIR "x64")
+    else()
+        message(FATAL_ERROR
+            "WebRTC requires a single macOS target architecture: arm64 or x86_64. "
+            "Got '${WEBRTC_TARGET_ARCH}'.")
+    endif()
+
+    set(WEBRTC_BUILD "${CMAKE_CURRENT_SOURCE_DIR}/lib/mac/${WEBRTC_ARCH_DIR}")
+    if(NOT EXISTS "${WEBRTC_BUILD}/libwebrtc.a")
+        message(FATAL_ERROR "Missing WebRTC archive: ${WEBRTC_BUILD}/libwebrtc.a")
+    endif()
+    message(STATUS "WebRTC archive: ${WEBRTC_BUILD}/libwebrtc.a")
 
 add_library(WebRTC STATIC IMPORTED GLOBAL)
 
 set_target_properties(WebRTC PROPERTIES
     IMPORTED_LOCATION
-        "${WEBRTC_LIBRARY}"
+        "${WEBRTC_BUILD}/libwebrtc.a"
 
     INTERFACE_INCLUDE_DIRECTORIES
-        "${CMAKE_CURRENT_LIST_DIR}/original_headers;${WEBRTC_SOURCE};${WEBRTC_DEPOT_SOURCE};${WEBRTC_DEPOT_SOURCE}/third_party/abseil-cpp;${WEBRTC_BUILD}/gen"
+        "${WEBRTC_SOURCE};${WEBRTC_SOURCE}/third_party/abseil-cpp;${WEBRTC_BUILD}"
 )
 
 target_compile_definitions(WebRTC INTERFACE
     WEBRTC_MAC
     WEBRTC_POSIX
 )
-
-if(APPLE)
     target_link_libraries(WebRTC INTERFACE
         "-framework Foundation"
         "-framework AppKit"

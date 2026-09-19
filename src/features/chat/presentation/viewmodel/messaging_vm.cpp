@@ -6,6 +6,13 @@
 
 MessagingViewModel *MessagingViewModel::s_instance = nullptr;
 
+void MessagingViewModel::requestCall(const QString &receiverId, const QString &userName)
+{
+    if (!receiverId.trimmed().isEmpty()) {
+        emit callRequested(m_activeConversationId, userName);
+    }
+}
+
 MessagingViewModel::MessagingViewModel(
     std::shared_ptr<domain::usecase::MessageUsecase> usecase,
     std::shared_ptr<domain::usecase::SendMessageUsecase> msg_usecase,

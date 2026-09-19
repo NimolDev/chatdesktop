@@ -3,19 +3,26 @@
 
 #include "api/jsep.h"
 
+#include <functional>
+#include <utility>
+
 namespace core {
 namespace rtc {
 
 class SetRemoteDescriptionObserver: public webrtc::SetSessionDescriptionObserver
 {
 public:
-SetRemoteDescriptionObserver() = default;
+    explicit SetRemoteDescriptionObserver(std::function<void()> onSuccess = {})
+        : m_onSuccess(std::move(onSuccess))
+    {
+    }
 
 public:
     void OnSuccess() override;
     void OnFailure(webrtc::RTCError error) override;
 
 private:
+    std::function<void()> m_onSuccess;
 
 };
 
