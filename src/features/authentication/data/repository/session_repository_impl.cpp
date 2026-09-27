@@ -65,6 +65,7 @@ void SessionRepositoryImpl::connectToXmpp()
 {
     if (!m_user.has_value ()) {
         return;
+
     }
     m_xmpp->connectToServer(
         m_user->xmpp_jid,

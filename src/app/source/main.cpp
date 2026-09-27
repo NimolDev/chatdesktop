@@ -24,9 +24,6 @@
 
 #include "logging/logger.hpp"
 
-// #ifdef Q_OS_MACOS
-// #include "platform/macos/notification.hpp"
-// #endif
 
 #include "platform/platform_main_window.hpp"
 #include "platform/platform_tray.hpp"
@@ -116,9 +113,6 @@ void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
         "LanguageManager"
         );
 }
-
-
-
 
 } // namespace
 

@@ -120,10 +120,33 @@ void XmppManager::connectToServer(
     if (m_client->state() != QXmppClient::DisconnectedState) {
         m_pendingConnection = parameters;
         m_client->disconnectFromServer();
+    };
+
+    // Return to QML immediately so pending UI changes can be rendered before
+    // QXmpp performs its connection setup. QXmppClient is event-driven and
+    // must remain on this QObject's thread, so QtConcurrent is not appropriate.
+    m_pendingConnection = parameters;
+    if (m_connectionStartScheduled) {
         return;
     }
 
-    startConnection(parameters);
+    m_connectionStartScheduled = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_connectionStartScheduled = false;
+        if (!m_pendingConnection.has_value()) {
+            return;
+        }
+
+        if (m_client->state() != QXmppClient::DisconnectedState) {
+            m_client->disconnectFromServer();
+            return;
+        }
+
+        const ConnectionParameters parameters =
+            std::move(m_pendingConnection.value());
+        m_pendingConnection.reset();
+        startConnection(parameters);
+    });
 }
 
 void XmppManager::startConnection(const ConnectionParameters &parameters)
@@ -265,6 +288,7 @@ void XmppManager::initializeSignals()
             setLastError ({});
             m_currentJid = m_client->configuration ().jid ();
             qInfo() << "XMPP connected: " << m_client->configuration ().jid ();
+
             emit connectedChanged ();
         }
         );

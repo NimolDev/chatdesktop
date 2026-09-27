@@ -38,7 +38,6 @@ void ConversationsVM::setInstance(ConversationsVM *instance)
 
 void ConversationsVM::fetchConversations()
 {
-
     auto future =  m_usecase->execute ();
     m_watcher.setFuture (future);
     m_isLoading = true;

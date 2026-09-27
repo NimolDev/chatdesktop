@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Window
+// import QtQuick.Window
 
 import Localization
 import Theme
@@ -15,18 +15,33 @@ import "component" as AppComponent
 
 ApplicationWindow {
     id: window
-    width: AppLayouts.width
-    height: AppLayouts.height
-    minimumWidth: AppLayouts.minWidth
-    minimumHeight: AppLayouts.minHeight
-    visible: true
+    width: 1080
+    height: 720
+    minimumWidth: 1080
+    minimumHeight: 720
+    visible: false
     title: AppController.userName
     color: Colors.error
      // flags: Qt.Window | Qt.FramelessWindowHint
 
+<<<<<<< HEAD
     Component.onCompleted: {
         AppController.checkAuthentication()
     }
+=======
+
+    // property bool lightMode: Application.styleHints.colorScheme === Qt.Light
+    // property color reallyDark: "#1f1f1f"
+    // property color dark: "#262626"
+    // property color reallyLight: "#e7e7e7"
+    property color light: Colors.primary
+    // color: "black"
+
+    readonly property Window aboutDialog: aboutDialogLoader.item as Window
+    menuBar:  Qt.platform.os === "osx" ? menuBar : null
+
+     Component.onCompleted: AppController.checkAuthentication()
+>>>>>>> window
 
     onClosing: function(close) {
         close.accepted = false
@@ -39,7 +54,7 @@ ApplicationWindow {
             var state = AppController.state
             switch(AppController.state ) {
             case AppController.Unauthenticated:
-                 pageLoader.sourceComponent = loginPage
+                pageLoader.sourceComponent = loginPage
                 break
             case AppController.Logout:
                  pageLoader.sourceComponent = loginPage
@@ -54,7 +69,11 @@ ApplicationWindow {
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
+<<<<<<< HEAD
             pageLoader.sourceComponent = mainWindow
+=======
+            // pageLoader.sourceComponent = chatPage
+>>>>>>> window
             window.title = LoginVM.userName
         }
     }
@@ -69,10 +88,37 @@ ApplicationWindow {
         })
     }
 
+<<<<<<< HEAD
     Loader {
         id: pageLoader
         anchors.fill: parent
         sourceComponent: loadingPage
+=======
+
+    Loader {
+        id: aboutDialogLoader
+        active: false
+        sourceComponent: Component {
+            AboutDialog {
+                onClosing: Qt.callLater(function() {
+                    aboutDialogLoader.active = false
+                })
+            }
+        }
+    }
+
+    Loader {
+        id: pageLoader
+        anchors.fill: parent
+        // color: Colors.background
+        sourceComponent: background
+    }
+    Component {
+        id: background
+        Rectangle {
+            color: Colors.background
+        }
+>>>>>>> window
     }
     Component {
         id: loadingPage

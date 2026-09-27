@@ -60,6 +60,7 @@ QFuture<domain::entity::MessageResponse> MessageRepositoryImpl::fetchMessageById
             auto domain = d->toDomain ();
 
             return domain;
+
         });
 }
 
