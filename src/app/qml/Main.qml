@@ -21,6 +21,8 @@ ApplicationWindow {
     minimumHeight: AppLayouts.minHeight
     visible: true
     title: AppController.userName
+    color: Colors.error
+     // flags: Qt.Window | Qt.FramelessWindowHint
 
     Component.onCompleted: {
         AppController.checkAuthentication()

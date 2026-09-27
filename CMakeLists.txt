@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake")
-set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture" FORCE)
+# Honor the architecture selected by the Qt kit or CMake command line.
+# If none is selected, CMake uses the compiler's native architecture.
 project(Chat_Desktop VERSION ${APP_VERSION} LANGUAGES CXX)
 
 if(APPLE)
@@ -45,6 +46,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Quick
+    QuickControls2
+    Multimedia
     Core
     Widgets
     Network
@@ -54,6 +57,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Positioning
     Location
     Concurrent
+    Test
 )
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -70,7 +74,14 @@ endif()
 #     I18N_SOURCE_LANGUAGE en
 #     I18N_TRANSLATED_LANGUAGES km
 # )
+
+# include(CTest)
+
 add_subdirectory(third_party)
 add_subdirectory(tools/string_encryptor)
 add_subdirectory(resources)
 add_subdirectory(src)
+
+# if (BUILD_TESTING)
+#     add_subdirectory(tests)
+# endif()

@@ -4,7 +4,7 @@
 #include "api/peer_connection_interface.h"
 
 #include <QObject>
-#include <QImage>
+#include <QVideoFrame>
 #include <QMutex>
 #include <api/video/video_frame.h>
 namespace core {
@@ -21,7 +21,7 @@ public:
     void OnTrack(webrtc::scoped_refptr<webrtc::RtpTransceiverInterface> transceiver) override;
     void OnRemoveTrack(webrtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver) override;
     void OnFrame(const webrtc::VideoFrame &frame) override;
-    bool takeRemoteVideoFrame(QImage &image);
+    bool takeRemoteVideoFrame(QVideoFrame &image);
     void detachRemoteVideo();
 
     // PeerConnectionObserver interface
@@ -40,7 +40,7 @@ public:
 private:
     webrtc::scoped_refptr<webrtc::VideoTrackInterface> m_remoteVideoTrack;
     QMutex m_frameMutex;
-    QImage m_latestFrame;
+    QVideoFrame m_latestFrame;
     bool m_framePending = false;
 
 signals:

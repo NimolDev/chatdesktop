@@ -34,7 +34,7 @@ set_target_properties(WebRTC PROPERTIES
         "${WEBRTC_BUILD}/libwebrtc.a"
 
     INTERFACE_INCLUDE_DIRECTORIES
-        "${WEBRTC_SOURCE};${WEBRTC_SOURCE}/third_party/abseil-cpp;${WEBRTC_BUILD}"
+        "${WEBRTC_SOURCE};${WEBRTC_SOURCE}/third_party/abseil-cpp;${WEBRTC_SOURCE}/third_party/libyuv/include;${WEBRTC_BUILD}"
 )
 
 target_compile_definitions(WebRTC INTERFACE

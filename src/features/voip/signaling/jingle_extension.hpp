@@ -5,6 +5,7 @@
 #include <QXmppJingleData.h>
 #include "jingle_message.hpp"
 #include "jingle_action.hpp"
+#include "signaling/call_state.hpp"
 
 
 
@@ -44,6 +45,7 @@ public:
     void sessionAccept(const QString &sdp_answer);
     void iceCandidate(const QString &candidate, const QString &sdpMid, int sdpMLineIndex);
     void sessioinInfo();
+    void sessionTerminate();
 
 
 signals:
@@ -77,11 +79,12 @@ signals:
     void transportReplaceReveived(const QString &sdp, const QString &sid);
     void transportAcceptReceived(const QString &sdp, const QString &sid);
 
+    void callStateChange(const voip::signaling::CallState &state);
+
 private:
     void initialize();
     void initializeJingleMessage();
     void initializeJingleAction();
-
 
 private:
     std::unique_ptr<voip::signaling::jingle::JingleMessage> m_message;

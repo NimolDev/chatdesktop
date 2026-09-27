@@ -8,6 +8,8 @@ add_library(voip_signaling STATIC
     signaling/ice_server.hpp
     signaling/jingle_service.hpp
     signaling/jingle_service.cpp
+    signaling/call_state.hpp
+
 )
 add_library(voip::signaling ALIAS voip_signaling)
 target_include_directories(voip_signaling PUBLIC
@@ -29,8 +31,6 @@ qt_add_qml_module(voip
    QML_FILES
        ${CHAT_QML_FILES}
    SOURCES
-       presentation/view/remote_video_item.hpp
-       presentation/view/remote_video_item.cpp
        presentation/viewmodel/call_vm.hpp
        presentation/viewmodel/call_vm.cpp
        domain/repository/call_repository.hpp
@@ -39,6 +39,10 @@ qt_add_qml_module(voip
        data/call_repository_impl.hpp
        data/call_repository_impl.cpp
        domain/model/jingle_state.hpp
+       QML_FILES presentation/view/CallOutView.qml
+       QML_FILES presentation/view/InStartCallView.qml
+       QML_FILES presentation/view/InComingCallView.qml
+
 
 
 )
@@ -58,10 +62,12 @@ target_link_libraries(voip
       Qt6::Core
       Qt6::Qml
       Qt6::Quick
+      Qt6::Multimedia
       network
       constants
       webrtc
       voip::signaling
+      core::media
       # ui
       # theme
       # localization

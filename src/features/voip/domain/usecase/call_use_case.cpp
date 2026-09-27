@@ -18,10 +18,28 @@ domain::CallUseCase::CallUseCase(std::shared_ptr<CallRepository> repository, QOb
             &CallRepository::proposeReceived,
             this,
             &CallUseCase::proposeReceived);
+
+
+    connect (m_repository.get (),
+            &CallRepository::sessionTerminate,
+            this,
+            &CallUseCase::sessionTerminate);
+
+
+
     connect(m_repository.get (),
             &CallRepository::connectionStateChanged ,
             this,
             &CallUseCase::connectionStateChanged);
+    connect(m_repository.get (),
+            &CallRepository::callStateChange,
+            this,
+            &CallUseCase::callStateChange);
+}
+
+void domain::CallUseCase::prepare()
+{
+    m_repository->prepare ();
 }
 
 void domain::CallUseCase::execute(const QString &receiverId, bool video)
@@ -42,4 +60,19 @@ void domain::CallUseCase::acceptCall()
 void domain::CallUseCase::endCall()
 {
     m_repository->endCall();
+}
+
+void domain::CallUseCase::setAudioInputDevice(const QAudioDevice &device)
+{
+    m_repository->setAudioInputDevice(device);
+}
+
+void domain::CallUseCase::setAudioOutputDevice(const QAudioDevice &device)
+{
+    m_repository->setAudioOutputDevice(device);
+}
+
+void domain::CallUseCase::setCameraDevice(const QCameraDevice &device)
+{
+    m_repository->setCameraDevice(device);
 }

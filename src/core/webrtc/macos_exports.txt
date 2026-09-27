@@ -1,7 +1,0 @@
-# Export only the application-facing wrapper, including Qt meta-object symbols.
-# Keep upstream WebRTC and BoringSSL symbols private to this dylib.
-__ZN4core3rtc12WebrtcClient*
-__ZNK4core3rtc12WebrtcClient*
-__ZTVN4core3rtc12WebrtcClientE
-__ZTIN4core3rtc12WebrtcClientE
-__ZTSN4core3rtc12WebrtcClientE

@@ -8,7 +8,6 @@ XmppServiceDiscovery::XmppServiceDiscovery(QXmppClient *client, QObject *parent)
 {
     Q_ASSERT (client);
     m_manager = client->addNewExtension<QXmppExternalServiceDiscoveryManager> ();
-
 }
 
 void XmppServiceDiscovery::requestExtDiscoQuery(const QString &server)
@@ -27,16 +26,16 @@ void XmppServiceDiscovery::requestExtDiscoQuery(const QString &server)
                 }
                 const auto &services = std::get<QVector<QXmppExternalService>>(result);
 
-                for (const QXmppExternalService &service : services) {
+                // for (const QXmppExternalService &service : services) {
 
 
-                    qDebug() << "Type:" << service.type();
-                    qDebug() << "Host:" << service.host();
-                    qDebug() << "Port:" << service.port();
-                    qDebug() << "Transport :" << static_cast<int>(service.transport ().value ());
-                    qDebug() << "Username:" << service.username();
-                    qDebug() << "Password:" << service.password();
-                }
+                //     qDebug() << "Type:" << service.type();
+                //     qDebug() << "Host:" << service.host();
+                //     qDebug() << "Port:" << service.port();
+                //     qDebug() << "Transport :" << static_cast<int>(service.transport ().value ());
+                //     qDebug() << "Username:" << service.username();
+                //     qDebug() << "Password:" << service.password();
+                // }
                 emit externalServiceReceived (services);
             });
 }

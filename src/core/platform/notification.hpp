@@ -3,6 +3,7 @@
 
 #include <QString>
 
+namespace core {
 namespace platform {
 
 class Notification
@@ -19,5 +20,6 @@ public:
 
 } // namespace platform
 
+} // namespace core
 
 #endif // NOTIFICATION_HPP

@@ -1,4 +1,4 @@
-#include "notification.hpp"
+#include "notification_mac.hpp"
 
 #import <AppKit/AppKit.h>
 #import <UserNotifications/UserNotifications.h>
@@ -92,6 +92,7 @@ static void installNotificationDelegate()
     });
 }
 
+namespace core {
 namespace platform {
 namespace macos {
 
@@ -100,20 +101,15 @@ static NSString *toNSString(const QString &value)
     return [NSString stringWithUTF8String: value.toUtf8 ().constData ()];
 }
 
-Notification::Notification()
+NotificationMac::NotificationMac()
 {
     installNotificationDelegate();
 }
 
-Notification &Notification::instance()
-{
-    static Notification notification;
-    return notification;
-}
+NotificationMac::~NotificationMac()
+{}
 
-
-
-void Notification::show(const QString &title, const QString &message)
+void NotificationMac::show(const QString &title, const QString &message)
 {
 
     UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
@@ -126,11 +122,11 @@ void Notification::show(const QString &title, const QString &message)
     }
 
     content.sound = [UNNotificationSound defaultSound];
-    content.userInfo = @{
-        @"senderId": toNSString("senderId"),
-        @"senderName": toNSString("senderName")
-    };
-
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    [userInfo setValue: toNSString ("senderId") forKey: @"senderId"];
+    [userInfo setValue: toNSString("senderName") forKey: @"senderName"];
+    content.userInfo = userInfo;
+    // [userInfo release];
     NSString *identifier = [[NSUUID UUID] UUIDString];
     UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier: identifier
                                                                           content: content
@@ -150,7 +146,7 @@ void Notification::show(const QString &title, const QString &message)
 
 }
 
-void Notification::requestPermission()
+void NotificationMac::requestPermission()
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         UNUserNotificationCenter *center =
@@ -194,3 +190,4 @@ void Notification::requestPermission()
 
 } // namespace macos
 } // namespace platform
+} // namespace core

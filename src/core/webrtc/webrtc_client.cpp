@@ -3,13 +3,16 @@
 #include "sdp_observer.hpp"
 #include "set_remote_description_observer.hpp"
 #include "logger.hpp"
-#include "camera_video_source.hpp"
+#include "qt_camera_frame.hpp"
+#include "qt_camera_capture.hpp"
+#include <QThread>
+#include <QElapsedTimer>
+#include <QVideoFrame>
+#include <rtc_base/time_utils.h>
 
 #include <QMetaObject>
 #include <QPointer>
 #include <QTimer>
-#include <QTransform>
-#include <common_video/libyuv/include/webrtc_libyuv.h>
 
 #include "api/video/video_frame.h"
 #include <api/audio_options.h>
@@ -81,6 +84,11 @@ class WebRtcClientPrivate
 
 public:
 
+    bool resumeRecording = false;
+    bool resumePlayout = false;
+    QAudioDevice audioInput;
+    QAudioDevice audioOutput;
+    QCameraDevice cameraDevice;
     bool cameraRequested = false;
     bool peerConnected = false;
     webrtc::AudioOptions audioOptions;
@@ -89,8 +97,7 @@ public:
     std::unique_ptr<webrtc::Thread> workerThread;
     std::unique_ptr<webrtc::Thread> signalingThread;
 
-    webrtc::scoped_refptr<webrtc::AudioDeviceModule> audioDevice;
-    webrtc::scoped_refptr<LocalVideoTrackSource> videoSource;
+    webrtc::scoped_refptr<webrtc::AudioDeviceModule> m_audioDevice;
     webrtc::scoped_refptr<webrtc::AudioTrackInterface> m_localAudioTrack;
     // webrtc::scoped_refptr<webrtc::VideoTrackInterface> m_localVideoTrack;
 
@@ -101,7 +108,9 @@ public:
     webrtc::scoped_refptr<core::rtc::SdpObserver> m_sdpObserver;
     webrtc::scoped_refptr<core::rtc::SetRemoteDescriptionObserver> m_remoteSdpObserver;
 
-    webrtc::scoped_refptr<core::rtc::CameraVideoSource> m_cameraSource;
+    webrtc::scoped_refptr<LocalVideoTrackSource> m_cameraSource;
+    QThread *captureThread = nullptr;
+    QtCameraCapture *capture = nullptr;
     webrtc::scoped_refptr<webrtc::VideoTrackInterface> m_localVideoTrack;
 
 };
@@ -113,31 +122,22 @@ WebrtcClient::WebrtcClient(QObject *parent)
     auto *videoTimer = new QTimer(this);
     videoTimer->setInterval(33);
     connect(videoTimer, &QTimer::timeout, this, [this] {
-        QImage image;
+        QVideoFrame image;
         if (d->peerConnected && d->m_peerObserver
             && d->m_peerObserver->takeRemoteVideoFrame(image)) {
             emit remoteVideoFrameReady(image);
         }
-        if (d->peerConnected && d->m_cameraSource && d->m_cameraSource->isRunning()) {
-            const auto frame = d->m_cameraSource->takePreviewFrame();
-            if (!frame) {
-                return;
+        if (d->cameraRequested && d->capture && d->m_cameraSource
+            && d->m_localVideoTrack && d->m_localVideoTrack->enabled()) {
+            const auto frame = d->capture->takeFrame();
+            const auto buffer = cameraFrameToI420(frame);
+            if (buffer) {
+                d->m_cameraSource->pushFrame(webrtc::VideoFrame::Builder()
+                    .set_video_frame_buffer(buffer)
+                    .set_timestamp_us(webrtc::TimeMicros())
+                    .set_rotation(static_cast<webrtc::VideoRotation>(frame.rotation()))
+                    .build());
             }
-            const auto buffer = frame->video_frame_buffer()->ToI420();
-            if (!buffer) {
-                return;
-            }
-            QImage preview(buffer->width(), buffer->height(), QImage::Format_RGBA8888);
-            const auto i420Frame = webrtc::VideoFrame::Builder()
-                                       .set_video_frame_buffer(buffer).build();
-            if (preview.isNull() || webrtc::ConvertFromI420(i420Frame, webrtc::VideoType::kABGR,
-                    preview.bytesPerLine(), preview.bits()) != 0) {
-                return;
-            }
-            if (frame->rotation() != webrtc::kVideoRotation_0) {
-                preview = preview.transformed(QTransform().rotate(static_cast<int>(frame->rotation())));
-            }
-            emit localVideoFrameReady(preview);
         }
     });
     videoTimer->start();
@@ -145,8 +145,12 @@ WebrtcClient::WebrtcClient(QObject *parent)
 
 WebrtcClient::~WebrtcClient()
 {
-    if (d->m_cameraSource) {
-        d->m_cameraSource->stop();
+    d->cameraRequested = false;
+    if (d->captureThread) {
+        disconnect(d->capture, nullptr, this, nullptr);
+        QMetaObject::invokeMethod(d->capture, &QtCameraCapture::stop, Qt::BlockingQueuedConnection);
+        d->captureThread->quit();
+        d->captureThread->wait();
     }
     if (d->m_peerConnection) {
         d->m_peerConnection->Close();
@@ -159,10 +163,9 @@ WebrtcClient::~WebrtcClient()
     d->m_peerConnection = nullptr;
     d->m_localVideoTrack = nullptr;
     d->m_cameraSource = nullptr;
-    d->videoSource = nullptr;
     d->m_localAudioTrack = nullptr;
     d->m_factory = nullptr;
-    d->audioDevice = nullptr;
+    d->m_audioDevice = nullptr;
     if (d->networkThread) {
         d->networkThread->Stop ();
     }
@@ -186,26 +189,15 @@ void WebrtcClient::configureAudioSession()
     d->audioOptions.highpass_filter = true;
     d->audioOptions.init_recording_on_send = true;
 
-    webrtc::Environment m_env = webrtc::CreateEnvironment ();
-    d->audioDevice = webrtc::CreateAudioDeviceModule (m_env,
-                                                     webrtc::AudioDeviceModule::kPlatformDefaultAudio);
-
-    if (!d->audioDevice) {
-        LOG_CRITICAL (QStringLiteral ("Failed to create AudioDeviceMode"));
-        return;
-    }
-    qDebug() << "Recording devices:"
-             << d->audioDevice->RecordingDevices();
-
-    qDebug() << "Playback devices:"
-             << d->audioDevice->PlayoutDevices();
-
 
 }
 
 bool WebrtcClient::initialize()
 {
+    QElapsedTimer startup;
+    startup.start();
     configureAudioSession();
+    LOG_INFO(QStringLiteral("WebRTC audio setup: %1 ms").arg(startup.elapsed()));
     d->networkThread = webrtc::Thread::CreateWithSocketServer ();
     d->workerThread = webrtc::Thread::Create ();
     d->signalingThread = webrtc::Thread::Create ();
@@ -227,11 +219,20 @@ bool WebrtcClient::initialize()
         return false;
     }
 
+    d->workerThread->BlockingCall([this] {
+        d->m_audioDevice = webrtc::CreateAudioDeviceModule(
+            webrtc::CreateEnvironment(), webrtc::AudioDeviceModule::kPlatformDefaultAudio);
+    });
+    if (!d->m_audioDevice) {
+        emit errorOccurred(QStringLiteral("Cannot initialize audio devices"));
+        return false;
+    }
+
     d->m_factory = webrtc::CreatePeerConnectionFactory(
         d->networkThread.get(),
         d->workerThread.get(),
         d->signalingThread.get(),
-        nullptr,
+        d->m_audioDevice,
         webrtc::CreateBuiltinAudioEncoderFactory(),
         webrtc::CreateBuiltinAudioDecoderFactory(),
         webrtc::CreateBuiltinVideoEncoderFactory(),
@@ -244,10 +245,37 @@ bool WebrtcClient::initialize()
         return false;
     }
 
+    applyAudioDevice(d->audioInput, true);
+    applyAudioDevice(d->audioOutput, false);
     createLocalAudioTrack ();
-    LOG_INFO("WebRTC PeerConnectionFactory ready");
+    LOG_INFO(QStringLiteral("WebRTC initialization complete: %1 ms").arg(startup.elapsed()));
     return true;
 }
+void WebrtcClient::prepare()
+{
+    if (!d->capture) {
+        d->captureThread = new QThread(this);
+        d->captureThread->setObjectName(QStringLiteral("QtCameraCapture"));
+        d->capture = new QtCameraCapture;
+        d->capture->moveToThread(d->captureThread);
+        connect(d->captureThread, &QThread::finished, d->capture, &QObject::deleteLater);
+        // Forward only the signal directly. No WebRTC state is accessed by the
+        // camera thread, and the GUI receiver uses its normal queued delivery.
+        connect(d->capture, &QtCameraCapture::frameReady,
+                this, &WebrtcClient::localVideoFrameReady, Qt::DirectConnection);
+        connect(d->capture, &QtCameraCapture::errorOccurred,
+                this, &WebrtcClient::errorOccurred);
+        connect(d->capture, &QtCameraCapture::activeChanged,
+                this, &WebrtcClient::cameraEnabledChanged);
+        d->captureThread->start();
+    }
+    const auto device = d->cameraDevice;
+    QMetaObject::invokeMethod(d->capture, [capture = d->capture, device]() {
+        capture->setDevice(device);
+        capture->prepare();
+    }, Qt::QueuedConnection);
+}
+
 
 bool WebrtcClient::createPeerConnection(const QList<core::rtc::IceServer> &iceServers)
 {
@@ -276,20 +304,22 @@ bool WebrtcClient::createPeerConnection(const QList<core::rtc::IceServer> &iceSe
 
     d->m_peerObserver = std::make_unique<core::rtc::PeerConnectionObserver> ();
     connect(d->m_peerObserver.get(), &PeerConnectionObserver::errorOccurred,
-            this, &WebrtcClient::errorOccurred, Qt::QueuedConnection);
+            d->m_peerObserver.get(), [this](const QString &message) {
+                emit errorOccurred(message);
+            }, Qt::QueuedConnection);
     connect(d->m_peerObserver.get(),
             &PeerConnectionObserver::iceCandidateChanged,
-            this,
+            d->m_peerObserver.get(),
             [this](const QString &candidate, const QString &sdpMid, int sdpMLineIndex) {
                 emit localIceCandidateGenerated(candidate, sdpMid, sdpMLineIndex);
             });
 
     connect(d->m_peerObserver.get(), &PeerConnectionObserver::connectionStateChanged,
-            this, [this](webrtc::PeerConnectionInterface::PeerConnectionState state) {
+            d->m_peerObserver.get(), [this](webrtc::PeerConnectionInterface::PeerConnectionState state) {
                 using State = webrtc::PeerConnectionInterface::PeerConnectionState;
                 d->peerConnected = state == State::kConnected;
                 if (!d->peerConnected) {
-                    emit remoteVideoFrameReady(QImage());
+                    emit remoteVideoFrameReady(QVideoFrame());
                 }
                 updateCameraCapture();
                 if (d->peerConnected) {
@@ -341,9 +371,10 @@ void WebrtcClient::createOffer(SdpCompletionHandler onSuccess)
     createLocalCameraTrack();
 
     const QPointer<WebrtcClient> self(this);
+    const QPointer<PeerConnectionObserver> connection(d->m_peerObserver.get());
     d->m_sdpObserver = webrtc::make_ref_counted<core::rtc::SdpObserver>(
-        [self, onSuccess = std::move(onSuccess)](std::unique_ptr<webrtc::SessionDescriptionInterface> description) {
-            if (!self || !self->d->m_peerConnection || !description) {
+        [self, connection, onSuccess = std::move(onSuccess)](std::unique_ptr<webrtc::SessionDescriptionInterface> description) {
+            if (!self || !connection || !self->d->m_peerConnection || !description) {
                 return;
             }
 
@@ -357,8 +388,8 @@ void WebrtcClient::createOffer(SdpCompletionHandler onSuccess)
             const QString offer = QString::fromStdString(sdp);
             auto setObserver =
                 webrtc::make_ref_counted<SetLocalDescriptionObserver>(
-                    [self, type, offer, onSuccess](webrtc::RTCError error) {
-                        if (!self) {
+                    [self, connection, type, offer, onSuccess](webrtc::RTCError error) {
+                        if (!self || !connection) {
                             return;
                         }
                         if (!error.ok()) {
@@ -370,18 +401,18 @@ void WebrtcClient::createOffer(SdpCompletionHandler onSuccess)
                         }
 
                         QMetaObject::invokeMethod(self.data(),
-                            [self, type, offer, onSuccess]() {
-                                if (!self) {
+                            [self, connection, type, offer, onSuccess]() {
+                                if (!self || !connection) {
                                     return;
                                 }
                                 emit self->localSdpCreated(type, offer);
-                                if (self && onSuccess) {
+                                if (self && connection && onSuccess) {
                                     onSuccess(offer);
                                 }
                             }, Qt::QueuedConnection);
                     });
 
-            LOG_INFO(QStringLiteral ("SDP Offer: %1").arg (offer));
+            // LOG_INFO(QStringLiteral ("SDP Offer: %1").arg (offer));
             self->d->m_peerConnection->SetLocalDescription(
                 std::move(description), std::move(setObserver));
         },
@@ -414,9 +445,10 @@ void WebrtcClient::createAnswer(SdpCompletionHandler onSuccess)
     createLocalCameraTrack();
 
     const QPointer<WebrtcClient> self(this);
+    const QPointer<PeerConnectionObserver> connection(d->m_peerObserver.get());
     d->m_sdpObserver = webrtc::make_ref_counted<core::rtc::SdpObserver>(
-        [self, onSuccess = std::move(onSuccess)](std::unique_ptr<webrtc::SessionDescriptionInterface> description) {
-            if (!self || !self->d->m_peerConnection || !description) {
+        [self, connection, onSuccess = std::move(onSuccess)](std::unique_ptr<webrtc::SessionDescriptionInterface> description) {
+            if (!self || !connection || !self->d->m_peerConnection || !description) {
                 return;
             }
 
@@ -430,8 +462,8 @@ void WebrtcClient::createAnswer(SdpCompletionHandler onSuccess)
             const QString answer = QString::fromStdString(sdp);
             auto setObserver =
                 webrtc::make_ref_counted<SetLocalDescriptionObserver>(
-                    [self, type, answer, onSuccess](webrtc::RTCError error) {
-                        if (!self) {
+                    [self, connection, type, answer, onSuccess](webrtc::RTCError error) {
+                        if (!self || !connection) {
                             return;
                         }
                         if (!error.ok()) {
@@ -443,18 +475,18 @@ void WebrtcClient::createAnswer(SdpCompletionHandler onSuccess)
                         }
 
                         QMetaObject::invokeMethod(self.data(),
-                            [self, type, answer, onSuccess]() {
-                                if (!self) {
+                            [self, connection, type, answer, onSuccess]() {
+                                if (!self || !connection) {
                                     return;
                                 }
                                 emit self->localSdpCreated(type, answer);
-                                if (self && onSuccess) {
+                                if (self && connection && onSuccess) {
                                     onSuccess(answer);
                                 }
                             }, Qt::QueuedConnection);
                     });
 
-            LOG_INFO(QStringLiteral ("SDP Answer: %1").arg (answer));
+            // LOG_INFO(QStringLiteral ("SDP Answer: %1").arg (answer));
             self->d->m_peerConnection->SetLocalDescription(
                 std::move(description), std::move(setObserver));
         },
@@ -490,13 +522,14 @@ bool WebrtcClient::setRemoteSdp(const QString &type, const QString &sdp,
         return false;
     }
     const QPointer<WebrtcClient> self(this);
+    const QPointer<PeerConnectionObserver> connection(d->m_peerObserver.get());
     d->m_remoteSdpObserver = webrtc::make_ref_counted<core::rtc::SetRemoteDescriptionObserver>(
-        [self, onSuccess = std::move(onSuccess)] {
-            if (!self) {
+        [self, connection, onSuccess = std::move(onSuccess)] {
+            if (!self || !connection) {
                 return;
             }
-            QMetaObject::invokeMethod(self.data(), [self, onSuccess] {
-                if (self && onSuccess) {
+            QMetaObject::invokeMethod(self.data(), [self, connection, onSuccess] {
+                if (self && connection && onSuccess) {
                     onSuccess();
                 }
             }, Qt::QueuedConnection);
@@ -524,23 +557,46 @@ bool WebrtcClient::setRemoteCandidate(const std::string &sdp,
                     QStringLiteral ("Add remote ICE Candidate failed: %1")
                         .arg (QString::fromStdString (error.message ()))
                     );
-            } else {
-                LOG_INFO ("ADD remote ICE Candidate");
             }
             return true;
         });
     return false;
 }
 
-bool WebrtcClient::pushVideoFrame(const webrtc::VideoFrame &frame)
+
+void WebrtcClient::closeConnection()
 {
-    if (!d->videoSource) {
-        LOG_WARNING("Cannot push a video frame before creating the peer connection");
-        return false;
+    const bool hadConnection = bool(d->m_peerConnection);
+    d->peerConnected = false;
+    d->cameraRequested = false;
+
+    updateCameraCapture();
+    if (d->m_peerObserver) {
+        QObject::disconnect(d->m_peerObserver.get(), nullptr, nullptr, nullptr);
+    }
+    if (d->m_peerConnection) {
+        d->m_peerConnection->Close();
+    }
+    if (d->m_peerObserver && d->signalingThread) {
+        d->signalingThread->BlockingCall([this] {
+            d->m_peerObserver->detachRemoteVideo();
+        });
     }
 
-    d->videoSource->pushFrame(frame);
-    return true;
+    // Keep the observer alive until WebRTC has released the connection.
+    d->m_peerConnection = nullptr;
+    d->m_peerObserver.reset();
+    d->m_sdpObserver = nullptr;
+    d->m_remoteSdpObserver = nullptr;
+    d->m_localVideoTrack = nullptr;
+    d->m_cameraSource = nullptr;
+
+    emit localVideoFrameReady(QVideoFrame());
+    emit remoteVideoFrameReady(QVideoFrame());
+    if (hadConnection) {
+        emit connectionStateChanged(ConnectionState::Disconnect);
+        emit disconnected();
+    }
 }
 
 // MARK: -- Audio session ---
@@ -588,43 +644,46 @@ void WebrtcClient::createLocalAudioTrack()
 
 void WebrtcClient::createLocalCameraTrack()
 {
-    if (!d->cameraRequested || d->m_localVideoTrack) {
+    if (!d->cameraRequested) {
         return;
     }
-    if (!d->m_factory || !d->m_peerConnection) {
-        LOG_WARNING ("PeerConnectionFactory or peer connection is null");
+    if (!d->m_factory) {
+        LOG_WARNING("PeerConnectionFactory is null");
         return;
     }
 
-    d->m_cameraSource = core::rtc::CameraVideoSource::Create (1280, 720, 30);
-
-    if (!d->m_cameraSource) {
-        LOG_WARNING ("Failed to create camera source");
-        emit errorOccurred(QStringLiteral("No usable local camera is available"));
-        return;
-    }
-    d->m_localVideoTrack = d->m_factory->CreateVideoTrack (d->m_cameraSource, "local_video");
     if (!d->m_localVideoTrack) {
-        LOG_WARNING (QStringLiteral ("Failed to create  video track"));
-        d->m_cameraSource = nullptr;
-        return;
+        d->m_cameraSource = webrtc::make_ref_counted<LocalVideoTrackSource>();
+        d->m_localVideoTrack = d->m_factory->CreateVideoTrack(d->m_cameraSource, "local_video");
+        if (!d->m_localVideoTrack) {
+            LOG_WARNING("Failed to create video track");
+            d->m_cameraSource = nullptr;
+            return;
+        }
     }
 
-    auto result = d->m_peerConnection->AddTrack (d->m_localVideoTrack, {"local_stream"});
-
-    if (!result.ok ()) {
-        LOG_WARNING (QStringLiteral ("Failed to add video track: %1")
-                        .arg (QString::fromStdString (result.error ().message ())));
-        d->m_localVideoTrack = nullptr;
-        d->m_cameraSource = nullptr;
-        return;
-    }
-    d->m_localVideoTrack->set_enabled(false);
+    // Local capture can run before the recipient accepts and a peer exists.
     updateCameraCapture();
+    if (!d->m_peerConnection) {
+        return;
+    }
+    for (const auto &sender : d->m_peerConnection->GetSenders()) {
+        if (sender->track().get() == d->m_localVideoTrack.get()) {
+            return;
+        }
+    }
+    auto result = d->m_peerConnection->AddTrack(d->m_localVideoTrack, {"local_stream"});
+    if (!result.ok()) {
+        LOG_WARNING(QStringLiteral("Failed to add video track: %1")
+                        .arg(QString::fromStdString(result.error().message())));
+        emit errorOccurred(QStringLiteral("Unable to add the local video track"));
+    }
 }
 
 void WebrtcClient::setCameraEnabled(bool enable)
 {
+    // Remember the request before the peer connection and video track exist.
+    // The track is added when preparing the SDP offer or answer.
     d->cameraRequested = enable;
     updateCameraCapture();
 }
@@ -645,27 +704,93 @@ std::unique_ptr<webrtc::IceCandidateInterface> WebrtcClient::parseIceCandidate(
 
 void WebrtcClient::updateCameraCapture()
 {
-    if (!d->m_localVideoTrack || !d->m_cameraSource) {
-        return;
+    if (d->m_localVideoTrack) {
+        d->m_localVideoTrack->set_enabled(d->cameraRequested);
     }
-    const bool wasEnabled = d->m_cameraSource->isRunning();
-    bool enabled = d->cameraRequested && d->peerConnected;
-    if (enabled) {
-        enabled = d->m_cameraSource->start();
-        if (!enabled) {
-            emit errorOccurred(QStringLiteral("Unable to start the local camera"));
-        }
-    } else {
-        d->m_cameraSource->stop();
+    if (d->cameraRequested && !d->capture) {
+        prepare();
     }
-    d->m_localVideoTrack->set_enabled(enabled);
-    if (!enabled) {
-        emit localVideoFrameReady(QImage());
-    }
-    if (wasEnabled != enabled) {
-        emit cameraEnabledChanged(enabled);
+    if (d->capture) {
+        QMetaObject::invokeMethod(d->capture,
+            d->cameraRequested ? &QtCameraCapture::start : &QtCameraCapture::stop,
+            Qt::QueuedConnection);
     }
 }
 
 } // namespace rtc
 } // namespace core
+
+void core::rtc::WebrtcClient::setAudioInputDevice(const QAudioDevice &device)
+{
+    d->audioInput = device;
+    applyAudioDevice(device, true);
+}
+
+void core::rtc::WebrtcClient::setAudioOutputDevice(const QAudioDevice &device)
+{
+    d->audioOutput = device;
+    applyAudioDevice(device, false);
+}
+
+void core::rtc::WebrtcClient::applyAudioDevice(const QAudioDevice &device, bool input)
+{
+    if (!d->m_factory || !d->m_audioDevice || !d->workerThread) {
+        return;
+    }
+    const bool success = d->workerThread->BlockingCall([this, device, input]() {
+        auto *adm = d->m_audioDevice.get();
+        bool &resume = input ? d->resumeRecording : d->resumePlayout;
+        const bool active = (input ? adm->Recording() : adm->Playing()) || resume;
+        const int count = input ? adm->RecordingDevices() : adm->PlayoutDevices();
+        int selected = -1;
+        for (int i = 0; i < count; ++i) {
+            char name[webrtc::kAdmMaxDeviceNameSize] = {};
+            char guid[webrtc::kAdmMaxGuidSize] = {};
+            const int result = input ? adm->RecordingDeviceName(i, name, guid)
+                                     : adm->PlayoutDeviceName(i, name, guid);
+            if (result == 0 && ((!device.id().isEmpty() && device.id() == QByteArray(guid))
+                               || device.description() == QString::fromUtf8(name))) {
+                selected = i;
+                break;
+            }
+        }
+        if (device.isNull()) {
+            resume = active;
+            return (input ? adm->StopRecording() : adm->StopPlayout()) == 0;
+        }
+        if (selected < 0) {
+            return false;
+        }
+        if ((input ? adm->StopRecording() : adm->StopPlayout()) != 0) {
+            return false;
+        }
+        if ((input ? adm->SetRecordingDevice(static_cast<uint16_t>(selected))
+                   : adm->SetPlayoutDevice(static_cast<uint16_t>(selected))) != 0) {
+            return false;
+        }
+        if (active) {
+            if ((input ? adm->InitRecording() : adm->InitPlayout()) != 0) {
+                return false;
+            }
+            const bool started = (input ? adm->StartRecording() : adm->StartPlayout()) == 0;
+            resume = !started;
+            return started;
+        }
+        return true;
+    });
+    if (!success) {
+        emit errorOccurred(QStringLiteral("Cannot switch %1 to %2")
+                           .arg(input ? QStringLiteral("audio input") : QStringLiteral("audio output"),
+                                device.description()));
+    }
+}
+
+void core::rtc::WebrtcClient::setCameraDevice(const QCameraDevice &device)
+{
+    d->cameraDevice = device;
+    if (d->capture) {
+        QMetaObject::invokeMethod(d->capture, [capture = d->capture, device]() {
+            capture->setDevice(device);
+        }, Qt::QueuedConnection);
+    }
+}

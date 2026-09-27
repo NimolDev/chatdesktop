@@ -112,8 +112,8 @@ void XmppManager::connectToServer(
     const ConnectionParameters parameters {
         .jid = normalized_jid,
         .password = password,
-        // .host = host.trimmed(),
-        .host  = "172.16.28.253",
+        .host = host.trimmed(),
+        // .host  = "172.16.28.253",
         .port = port
     };
 
@@ -358,10 +358,10 @@ void XmppManager::initializeSignals()
         );
 
 
-    auto *logger = m_client->logger();
+    // auto *logger = m_client->logger();
 
-    logger->setLoggingType(QXmppLogger::StdoutLogging);
-    logger->setMessageTypes(QXmppLogger::AnyMessage);
+    // logger->setLoggingType(QXmppLogger::StdoutLogging);
+    // logger->setMessageTypes(QXmppLogger::AnyMessage);
 }
 
 

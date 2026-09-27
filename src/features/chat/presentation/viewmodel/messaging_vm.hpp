@@ -14,6 +14,7 @@ class MessagingViewModel : public QAbstractListModel
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
+
 public:
     enum Roles {
         IdRole = Qt::UserRole + 1,
@@ -49,7 +50,6 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     bool isLoading() const;
-
 
 signals:
     void callRequested(const QString &receiverId, const QString &userName);
