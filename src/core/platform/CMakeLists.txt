@@ -1,27 +1,71 @@
-if(APPLE)
-    add_library(platform STATIC
-        notification.hpp
-        macos/mac_window.hpp
-        macos/mac_window.mm
-        macos/macos_menu_bar.hpp
-        macos/macos_menu_bar.mm
-        macos/macos_tray_icon.hpp
-        macos/macos_tray_icon.mm
-        macos/notification.hpp
-        macos/notification.mm
-        macos/pet_window.hpp
-        macos/pet_window.mm
-    )
-    target_link_libraries(platform
-        PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets
-        PRIVATE "-framework AppKit" "-framework UserNotifications"
-    )
-else()
-    # No platform implementation has been added for other systems yet.
-    add_library(platform INTERFACE)
-    target_link_libraries(platform INTERFACE Qt6::Core Qt6::Gui)
-endif()
+add_library(platform STATIC
+    application_menu.hpp
+    platform_menu.hpp
+    platform_notification.hpp)
 
-target_include_directories(platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+target_sources(platform
+    PRIVATE
+        main_window.hpp
+        tray_icon.hpp
+        notification.hpp
+        platform_tray.hpp
+        platform_main_window.hpp
+)
+
+target_link_libraries(platform
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+)
+
+target_include_directories(platform
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/.."
+)
+
+if(APPLE)
+    enable_language(OBJCXX)
+
+    target_sources(platform
+        PRIVATE
+            macos/application_menu_mac.hpp
+            macos/application_menu_mac.mm
+            macos/main_window_mac.hpp
+            macos/main_window_mac.mm
+
+            macos/notification_mac.hpp
+            macos/notification_mac.mm
+
+            # macos/mac_window.hpp
+            # macos/mac_window.mm
+
+            macos/tray_mac.hpp
+            macos/tray_mac.mm
+    )
+
+    target_link_libraries(platform
+        PRIVATE
+            "-framework AppKit"
+            "-framework UserNotifications"
+    )
+
+elseif(WIN32)
+
+    target_sources(platform
+        PRIVATE
+            win/main_window_win.hpp
+            win/main_window_win.cpp
+
+            win/notification_win.hpp
+            win/notification_win.cpp
+
+            win/win_tray.hpp
+            win/win_tray.cpp
+    )
+
+    target_link_libraries(platform PRIVATE dwmapi)
+
+endif()
 
 add_library(core::platform ALIAS platform)

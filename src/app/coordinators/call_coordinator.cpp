@@ -1,6 +1,7 @@
 #include "call_coordinator.hpp"
 #include "app_container.hpp"
 #include "app_controller.hpp"
+#include "logger.hpp"
 #include "voip/presentation/viewmodel/call_vm.hpp"
 
 #include <QQmlComponent>
@@ -9,9 +10,6 @@
 #include <QWindow>
 #include <QtQml/qqmlinfo.h>
 
-#ifdef Q_OS_MACOS
-#include "platform/macos/mac_window.hpp"
-#endif
 
 CallCoordinator::CallCoordinator(AppContainer &appContainer, QQmlEngine &engine, QObject *parent)
     : QObject(parent)
@@ -27,6 +25,7 @@ CallCoordinator::CallCoordinator(AppContainer &appContainer, QQmlEngine &engine,
             reset();
         }
     });
+
 }
 
 void CallCoordinator::setCallViewModel(CallVM *viewModel)
@@ -53,7 +52,7 @@ void CallCoordinator::setCallViewModel(CallVM *viewModel)
             });
     connect(m_callViewModel, &CallVM::callFailed, this, [this](const QString &reason) {
         if (m_callWindow) {
-            m_callWindow->setProperty("_isStartCall", false);
+            // Errors during negotiation must not navigate away from the call.
             m_callWindow->setProperty("signalingError", reason);
         }
     });
@@ -62,9 +61,9 @@ void CallCoordinator::setCallViewModel(CallVM *viewModel)
             this,
             [this](const QString &sender,
                    bool video) {
+                LOG_INFO("Incoming call");
                 showCallWindow(sender, sender.section(QLatin1Char('/'), 0, 0), true, video);
             });
-
 }
 
 
@@ -124,6 +123,7 @@ void CallCoordinator::showCallWindow(const QString &receiverId, const QString &u
         QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
         window->QObject::setParent(this);
         m_callWindow = window;
+        m_window.setup(window);
         connect(window, SIGNAL(startCallRequested(bool)),
                 m_callViewModel, SLOT(startCall(bool)));
 #ifdef Q_OS_MACOS
@@ -139,11 +139,8 @@ void CallCoordinator::showCallWindow(const QString &receiverId, const QString &u
     m_callWindow->setProperty("_isStartCall", false);
     m_callWindow->setProperty("incomingCall", incoming);
     m_callWindow->setProperty("incomingVideo", video);
-#ifdef Q_OS_MACOS
-    // Extend the call background into the title bar while retaining the
-    // native close, minimize, and fullscreen buttons.
-    core::platform::macos::configureWindow(m_callWindow);
-#endif
+
+    m_window.setWindowFillContent ();
     m_callWindow->showNormal();
     updateCallWindowPin();
     m_callWindow->raise();
@@ -154,8 +151,7 @@ void CallCoordinator::updateCallWindowPin()
 {
 #ifdef Q_OS_MACOS
     if (m_callWindow) {
-        core::platform::macos::setWindowPinned(
-            m_callWindow, m_callWindow->property("_isPinned").toBool());
+        m_window.pineWindow (m_callWindow->property("_isPinned").toBool());
     }
 #endif
 }

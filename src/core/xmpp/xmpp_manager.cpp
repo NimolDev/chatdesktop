@@ -111,8 +111,7 @@ void XmppManager::connectToServer(
     const ConnectionParameters parameters {
         .jid = normalized_jid,
         .password = password,
-        // .host = host.trimmed(),
-        .host  = "172.16.28.253",
+        .host = host.trimmed(),
         .port = port
     };
 
@@ -123,6 +122,33 @@ void XmppManager::connectToServer(
     }
 
     startConnection(parameters);
+
+
+    // Return to QML immediately so pending UI changes can be rendered before
+    // QXmpp performs its connection setup. QXmppClient is event-driven and
+    // must remain on this QObject's thread, so QtConcurrent is not appropriate.
+    m_pendingConnection = parameters;
+    if (m_connectionStartScheduled) {
+        return;
+    }
+
+    m_connectionStartScheduled = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_connectionStartScheduled = false;
+        if (!m_pendingConnection.has_value()) {
+            return;
+        }
+
+        if (m_client->state() != QXmppClient::DisconnectedState) {
+            m_client->disconnectFromServer();
+            return;
+        }
+
+        const ConnectionParameters parameters = std::move(m_pendingConnection.value());
+        m_pendingConnection.reset();
+        startConnection(parameters);
+    });
+
 }
 
 void XmppManager::startConnection(const ConnectionParameters &parameters)
@@ -357,10 +383,10 @@ void XmppManager::initializeSignals()
         );
 
 
-    auto *logger = m_client->logger();
+    // auto *logger = m_client->logger();
 
-    logger->setLoggingType(QXmppLogger::StdoutLogging);
-    logger->setMessageTypes(QXmppLogger::AnyMessage);
+    // logger->setLoggingType(QXmppLogger::StdoutLogging);
+    // logger->setMessageTypes(QXmppLogger::AnyMessage);
 }
 
 

@@ -108,15 +108,27 @@ void JingleExtension::initializeJingleMessage()
     connect(m_message.get (),
             &jingle::JingleMessage::retractReceived,
             this,
-            &JingleExtension::retractReceived);
+            [this](const QString &retract,
+                   const QString &mid) {
+
+                emit callStateChange (CallState::HandUp);
+                emit retractReceived (retract, mid);
+            });
     connect (m_message.get (),
             &jingle::JingleMessage::ringingReceived,
             this,
-            &JingleExtension::ringingReceived);
+            [this]() {
+                emit callStateChange (CallState::Ringing);
+            }
+           );
     connect (m_message.get (),
             &jingle::JingleMessage::acceptReceived,
             this,
-            &JingleExtension::acceptReceived);
+            [this](const QString &accept,
+                   const QString &mid) {
+                emit callStateChange (CallState::Exchange);
+                emit acceptReceived (accept, mid);
+            });
     connect(m_message.get (),
             &jingle::JingleMessage::proceedReceived,
             this,
@@ -124,7 +136,11 @@ void JingleExtension::initializeJingleMessage()
     connect (m_message.get (),
             &jingle::JingleMessage::rejectReceived,
             this,
-            &JingleExtension::rejectReceived);
+            [this](const QString &reject,
+                   const QString &mid) {
+                emit callStateChange (CallState::Reject);
+                emit rejectReceived (reject, mid);
+            });
     connect (m_message.get (),
             &jingle::JingleMessage::finishReceived,
             this,
@@ -139,6 +155,7 @@ void JingleExtension::sendAccept()
     }
 
     client() ->send (m_message->accept (proposeFrom, mid));
+    emit callStateChange (CallState::Exchange);
 }
 
 void JingleExtension::ringing()
@@ -153,6 +170,7 @@ void JingleExtension::proceed(const QString &recipient, bool video)
 
 void JingleExtension::propose(const QString &recipient, bool video)
 {
+    emit callStateChange (CallState::Calling);
     QList<jingle::StreamType> streams = {jingle::StreamType::Audio};
     if (video) {
         streams.append (jingle::StreamType::Video);
@@ -181,9 +199,6 @@ void JingleExtension::initializeJingleAction()
             [this](const QString &offer,
                    const QList<voip::signaling::IceServer> &ice_servers,
                    const QString &sid) {
-                qDebug() << "offfer" << offer;
-                qDebug() << "ICE server count" << ice_servers.size();
-                qDebug() << "sid" << sid;
                 m_currentSid = sid;
                 emit remoteSdpOfferReceived (offer, ice_servers, sid);
             }
@@ -278,7 +293,18 @@ void JingleExtension::iceCandidate(const QString &candidate, const QString &sdpM
     });
 }
 
-
+void JingleExtension::sessionTerminate()
+{
+    if (!client() || !client()->isConnected () || m_sessionSender.isEmpty ()) {
+        return;
+    }
+    auto iq = m_jingleAction->sessionTerminate (m_sessionSender);
+    client()->sendIq(std::move (iq)).then(this, [](QXmppClient::IqResult result) {
+        if (const auto *error = std::get_if<QXmppError> (&result)) {
+            qWarning() << "Session terminate failed:" << error->description;
+        }
+    });
+}
 
 } // namespace signaling
 } // namespace voip

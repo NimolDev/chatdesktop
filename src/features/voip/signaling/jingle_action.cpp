@@ -116,12 +116,15 @@ bool voip::signaling::jingle::JingleAction::parse(const QDomElement &element)
     }
     case ActionType::SessionTerminate: {
         // TODO: Parse session termination.
+        LOG_INFO("Session terminate");
+        emit sessionTerminateReceived (true);
     }
         break;
 
-    case ActionType::SessionInfo:
+    case ActionType::SessionInfo: {
         // TODO: Parse session information.
         break;
+    }
     case ActionType::SessionTransport: {
         if (sid != m_currentSid) {
             return false;
@@ -333,12 +336,23 @@ QXmppIq voip::signaling::jingle::JingleAction::sessionInfo(
     return iq;
 }
 
+/*
+ * <iq type="set" to="" id="" from="">
+ * <jingle xmlns="urn:xmpp:jingle:1" action="session-terminate" sid="">
+ *   <reason>
+ *      <success/>
+ *      <text>Stuck!</text>
+ *   </reason>
+ * </jingle>
+ * </iq>
+ */
 QXmppIq voip::signaling::jingle::JingleAction::sessionTerminate(const QString recipient)
 {
     QXmppElement jingle;
     jingle.setTagName (QStringLiteral ("jingle"));
     jingle.setAttribute (QStringLiteral ("xmlns"), kJINGLE_NAME);
     jingle.setAttribute (QStringLiteral ("sid"), m_currentSid);
+    jingle.setAttribute (QStringLiteral ("action"), fromType (ActionType::SessionTerminate));
 
     QXmppElement reason;
     reason.setTagName (QStringLiteral ("reason"));
@@ -347,6 +361,10 @@ QXmppIq voip::signaling::jingle::JingleAction::sessionTerminate(const QString re
     QXmppElement text;
     text.setTagName (QStringLiteral ("text"));
     text.setValue (QStringLiteral ("Stuck!"));
+
+    reason.appendChild (success);
+    reason.appendChild (text);
+    jingle.appendChild (reason);
 
     QXmppIq iq;
     iq.setType (QXmppIq::Type::Set);

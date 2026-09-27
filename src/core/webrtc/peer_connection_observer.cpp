@@ -2,9 +2,7 @@
 
 #include "logger.hpp"
 #include <QMutexLocker>
-#include <QTransform>
-#include <common_video/libyuv/include/webrtc_libyuv.h>
-
+#include <libyuv/convert.h>
 namespace core {
 namespace rtc {
 
@@ -29,7 +27,7 @@ void PeerConnectionObserver::detachRemoteVideo()
         m_remoteVideoTrack = nullptr;
     }
     QMutexLocker lock(&m_frameMutex);
-    m_latestFrame = QImage();
+    m_latestFrame = QVideoFrame();
     m_framePending = true;
 }
 
@@ -59,27 +57,28 @@ void PeerConnectionObserver::OnFrame(const webrtc::VideoFrame &frame)
     if (!buffer) {
         return;
     }
-    QImage image(buffer->width(), buffer->height(), QImage::Format_RGBA8888);
-    if (image.isNull()) {
+    QVideoFrame image(QVideoFrameFormat(QSize(buffer->width(), buffer->height()),
+                                        QVideoFrameFormat::Format_YUV420P));
+    if (!image.map(QVideoFrame::WriteOnly)) {
         return;
     }
-    const auto i420Frame = webrtc::VideoFrame::Builder()
-                               .set_video_frame_buffer(buffer)
-                               .build();
-    if (webrtc::ConvertFromI420(i420Frame, webrtc::VideoType::kABGR,
-                               image.bytesPerLine(), image.bits()) != 0) {
+    const int result = libyuv::I420Copy(buffer->DataY(), buffer->StrideY(),
+        buffer->DataU(), buffer->StrideU(), buffer->DataV(), buffer->StrideV(),
+        image.bits(0), image.bytesPerLine(0), image.bits(1), image.bytesPerLine(1),
+        image.bits(2), image.bytesPerLine(2), buffer->width(), buffer->height());
+    image.unmap();
+    if (result != 0) {
         return;
     }
-    if (frame.rotation() != webrtc::kVideoRotation_0) {
-        image = image.transformed(QTransform().rotate(static_cast<int>(frame.rotation())));
-    }
+    image.setRotation(static_cast<QtVideo::Rotation>(frame.rotation()));
+    image.setStartTime(frame.timestamp_us());
     // Keep only the newest decoded frame until Qt is ready to present it.
     QMutexLocker lock(&m_frameMutex);
     m_latestFrame = std::move(image);
     m_framePending = true;
 }
 
-bool PeerConnectionObserver::takeRemoteVideoFrame(QImage &image)
+bool PeerConnectionObserver::takeRemoteVideoFrame(QVideoFrame &image)
 {
     QMutexLocker lock(&m_frameMutex);
     if (!m_framePending) {
@@ -167,10 +166,10 @@ void PeerConnectionObserver::OnIceGatheringChange(webrtc::PeerConnectionInterfac
 
 void PeerConnectionObserver::OnIceCandidate(const webrtc::IceCandidate *candidate)
 {
-    LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->sdp_mid ()));
-    LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->sdp_mline_index ()));
-    LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->server_url ()));
-    LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->candidate ().ToString ()));
+    // LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->sdp_mid ()));
+    // LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->sdp_mline_index ()));
+    // LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->server_url ()));
+    // LOG_INFO (QStringLiteral ("OnIceCandidate: %1").arg (candidate->candidate ().ToString ()));
 
     const QString candidate_str = QString::fromStdString (candidate->ToString ());
     emit iceCandidateChanged(candidate_str, QString::fromStdString(candidate->sdp_mid()),
@@ -192,7 +191,6 @@ void PeerConnectionObserver::OnIceCandidateError(const std::string &address, int
 
 void PeerConnectionObserver::OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState state)
 {
-
     switch (state) {
     case webrtc::PeerConnectionInterface::kIceConnectionNew:
          LOG_INFO (QStringLiteral ("OnIceConnectionChange: New"));

@@ -10,7 +10,9 @@
 #endif
 
 #include <QObject>
-#include <QImage>
+#include <QAudioDevice>
+#include <QCameraDevice>
+#include <QVideoFrame>
 #include <QList>
 #include <functional>
 #include <memory>
@@ -46,7 +48,14 @@ public:
 
     bool initialize();
 
+    // Prepare the camera on its capture thread without starting capture.
+    void prepare();
+
     bool createPeerConnection(const QList<core::rtc::IceServer> &iceServers);
+
+    // Call on this object's Qt thread. Safe to repeat; keeps the factory ready
+    // for another peer connection and cancels pending SDP completion delivery.
+    void closeConnection();
 
     using SdpCompletionHandler = std::function<void(const QString &sdp)>;
 
@@ -64,18 +73,19 @@ public:
                             const std::string &sdpMid,
                             const int sdpMLineIndex);
 
-    // Delivers a captured frame to the local WebRTC video track. This may be
-    // called from a capture thread after createPeerConnection() succeeds.
-    bool pushVideoFrame(const webrtc::VideoFrame &frame);
 
     // Configures voice processing for subsequently created local audio tracks.
     // Called automatically by initialize(), on this object's thread.
     void configureAudioSession();
 
+    void setAudioInputDevice(const QAudioDevice &device);
+    void setAudioOutputDevice(const QAudioDevice &device);
+    void setCameraDevice(const QCameraDevice &device);
+
     void setEnableSpeaker(bool speaker);
     void setMuteMicrophone(bool mute);
 
-    // Enable video before SDP negotiation; capture starts when connected.
+    // Enable video before SDP negotiation; local capture can start before a peer exists.
     void createLocalCameraTrack();
     void setCameraEnabled(bool enable);
 
@@ -107,14 +117,15 @@ signals:
         int mlineIndex,
         const QString &candidate);
 
-    void localVideoFrameReady(const QImage &image);
-    void remoteVideoFrameReady(const QImage &image);
+    void localVideoFrameReady(const QVideoFrame &frame);
+    void remoteVideoFrameReady(const QVideoFrame &frame);
     void connected();
     void disconnected();
     void localIceCandidateGenerated(const QString &candidate, const QString &sdpMid, int sdpMLineIndex);
     void connectionStateChanged(core::rtc::ConnectionState state);
 
 private:
+    void applyAudioDevice(const QAudioDevice &device, bool input);
     void createLocalAudioTrack();
     void updateCameraCapture();
 

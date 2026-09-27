@@ -6,12 +6,18 @@ else()
 endif()
 
 add_library(webrtc ${WEBRTC_WRAPPER_TYPE}
-    webrtc_client.hpp webrtc_client.cpp
-    peer_connection_observer.hpp peer_connection_observer.cpp
-    sdp_observer.hpp sdp_observer.cpp
-    set_remote_description_observer.hpp set_remote_description_observer.cpp
+    webrtc_client.hpp
+    webrtc_client.cpp
+    peer_connection_observer.hpp
+    peer_connection_observer.cpp
+    sdp_observer.hpp
+    sdp_observer.cpp
+    set_remote_description_observer.hpp
+    set_remote_description_observer.cpp
     ice_server.hpp
-    camera_video_source.hpp camera_video_source.cpp
+    qt_camera_capture.hpp
+    qt_camera_capture.cpp
+    qt_camera_frame.hpp
 
 )
 add_library(core::webrtc ALIAS webrtc)
@@ -24,6 +30,8 @@ target_link_libraries(webrtc
  PUBLIC
     Qt6::Core
     Qt6::Gui
+    Qt6::Multimedia
+    WebRTC
  PRIVATE
     WebRTC
     logging

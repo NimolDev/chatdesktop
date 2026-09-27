@@ -12,24 +12,60 @@ data::CallRepositoryImpl::CallRepositoryImpl(
             this, &domain::CallRepository::localVideoFrameReady);
     connect(m_signaling.get(), &voip::signaling::JingleService::remoteVideoFrameReady,
             this, &domain::CallRepository::remoteVideoFrameReady);
-    connect(m_signaling.get(), &voip::signaling::JingleService::messageReceived,
-            this, [this](const QString &action, const QString &sender,
-                         const QString &sessionId,
-                         const QList<voip::signaling::jingle::StreamType> &streams,
-                         const QString &reason) {
-                emit jingleMessageReceived(action, sender, sessionId,
-                    streams.contains(voip::signaling::jingle::StreamType::Video), reason);
-            });
+
     connect(m_signaling.get(), &voip::signaling::JingleService::signalingFailed,
             this, &domain::CallRepository::signalingFailed);
 
     connect(m_signaling.get (),
-            &voip::signaling::JingleService::proposalReceived,
+            &voip::signaling::JingleService::proposeReceived,
             this,
             [this](const QString &sender,
                    const QList<voip::signaling::jingle::StreamType> &streams) {
                 emit proposeReceived (sender, streams.contains (voip::signaling::jingle::StreamType::Video));
             });
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::ringingReceived,
+            this,
+            &domain::CallRepository::ringingReceived);
+
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::acceptReceived,
+            this,
+            &domain::CallRepository::acceptReceived);
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::rejectReceived,
+            this,
+            [this](const QString &reject,
+                   const QString &mid) {
+                emit rejectReceived (reject, mid);
+            });
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::retractReceived,
+            this,
+            [this](const QString &retract,
+                   const QString &mid) {
+                emit retractReceived (retract, mid);
+            });
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::proceedReceived,
+            this,
+            [this](const QString &proceed,
+                   const QString &mid) {
+                emit proceedReceived (proceed, mid);
+            });
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::finishReceived,
+            this,
+            [this](const QString &finish,
+                   const QString &mid) {
+                emit finishReceived (finish, mid);
+            });
+
+
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::sessionTerminate ,
+            this,
+            &domain::CallRepository::sessionTerminate);
 
     connect(m_signaling.get (),
             &voip::signaling::JingleService::connectionStateChange,
@@ -49,6 +85,35 @@ data::CallRepositoryImpl::CallRepositoryImpl(
                     emit connectionStateChanged ("Disconnected");
                     break;
                 }
+            });
+    connect(m_signaling.get (),
+            &voip::signaling::JingleService::callStateChange,
+            this,
+            [this](const voip::signaling::CallState &state) {
+                switch(state) {
+                case voip::signaling::CallState::Calling:
+                    qDebug() << "Repo: Calling";
+                    break;
+                case voip::signaling::CallState::Ringing:
+                    qDebug() << "Repo: Ringing";
+                    break;
+                case voip::signaling::CallState::Connected:
+                    qDebug() << "Repo: Connected";
+                    break;
+                case voip::signaling::CallState::Reconnect:
+                    qDebug() << "Repo: Reconnect";
+                    break;
+                case voip::signaling::CallState::Reject:
+                    qDebug() << "Repo: Reject";
+                    break;
+                case voip::signaling::CallState::HandUp:
+                    qDebug() << "Repo: Handup";
+                    break;
+                case voip::signaling::CallState::Exchange:
+                    qDebug() << "Repo: Exchange";
+                    break;
+                }
+                emit callStateChange (state);
             });
 }
 
@@ -70,4 +135,53 @@ void data::CallRepositoryImpl::declineCall()
 void data::CallRepositoryImpl::acceptCall()
 {
     m_signaling->acceptCall ();
+}
+
+void data::CallRepositoryImpl::prepare()
+{
+    m_signaling->prepare ();
+}
+
+void data::CallRepositoryImpl::rejectCall()
+{
+    m_signaling->rejectCall ();
+}
+
+void data::CallRepositoryImpl::retractCall()
+{
+
+}
+
+void data::CallRepositoryImpl::finishCall()
+{
+
+}
+
+void data::CallRepositoryImpl::proceedCall()
+{
+
+}
+
+void data::CallRepositoryImpl::setAudioInputDevice(const QAudioDevice &device)
+{
+    QMetaObject::invokeMethod(m_signaling.get(),
+        [service = m_signaling.get(), device]() {
+            service->setAudioInputDevice(device);
+        }, Qt::QueuedConnection);
+}
+
+void data::CallRepositoryImpl::setAudioOutputDevice(const QAudioDevice &device)
+{
+    QMetaObject::invokeMethod(m_signaling.get(),
+        [service = m_signaling.get(), device]() {
+            service->setAudioOutputDevice(device);
+        }, Qt::QueuedConnection);
+}
+
+void data::CallRepositoryImpl::setCameraDevice(const QCameraDevice &device)
+{
+    QMetaObject::invokeMethod(m_signaling.get(),
+        [service = m_signaling.get(), device]() {
+            service->setCameraDevice(device);
+        }, Qt::QueuedConnection);
 }

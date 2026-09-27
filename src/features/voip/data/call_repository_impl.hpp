@@ -33,6 +33,14 @@ public:
     void endCall() override;
     void declineCall() override;
     void acceptCall() override;
+    void prepare() override;
+    void setAudioInputDevice(const QAudioDevice &device) override;
+    void setAudioOutputDevice(const QAudioDevice &device) override;
+    void setCameraDevice(const QCameraDevice &device) override;
+    void rejectCall() override;
+    void retractCall() override;
+    void finishCall() override;
+    void proceedCall() override;
 };
 
 } // namespace data

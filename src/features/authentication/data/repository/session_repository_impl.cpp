@@ -63,9 +63,9 @@ bool SessionRepositoryImpl::logout()
 
 void SessionRepositoryImpl::connectToXmpp()
 {
-    if (!m_user) {
-        qDebug() << "No user";
-        return ;
+
+    if (!m_user.has_value ()) {
+        return;
     }
     m_xmpp->connectToServer(
         m_user->xmpp_jid,

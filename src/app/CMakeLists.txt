@@ -113,6 +113,18 @@ if(APPLE)
             "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks/$<TARGET_SONAME_FILE_NAME:QXmppQt6>"
         VERBATIM
     )
+
+# get_target_property(QXMPP_TARGET_TYPE QXmppQt6 TYPE)
+    # if(QXMPP_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
+    #     add_custom_command(TARGET ChatApp POST_BUILD
+    #         COMMAND ${CMAKE_COMMAND} -E make_directory
+    #             "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks"
+
+    #         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    #             "$<TARGET_FILE:QXmppQt6>"
+    #             "$<TARGET_BUNDLE_DIR:ChatApp>/Contents/Frameworks/$<TARGET_SONAME_FILE_NAME:QXmppQt6>"
+    #     )
+    # endif()
 endif()
 
 # Populate QML imports for build-tree macOS bundles before signing them.
@@ -123,6 +135,20 @@ qt_generate_deploy_qml_app_script(
     MACOS_BUNDLE_POST_BUILD
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
+
+if(APPLE AND TARGET Qt6::QQmlPreviewServiceFactoryPlugin)
+    # A bundled qt.conf redirects plugin lookup into the app. Include the
+    # development plugins so Qt Creator can connect to Debug QML previews.
+    add_custom_command(TARGET ChatApp POST_BUILD
+        COMMAND "${CMAKE_COMMAND}"
+            "-DBUILD_CONFIG=$<CONFIG>"
+            "-DQML_TOOLING_DIR=$<TARGET_FILE_DIR:Qt6::QQmlPreviewServiceFactoryPlugin>"
+            "-DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:ChatApp>"
+            -P "${CMAKE_SOURCE_DIR}/cmake/macos/deploy_qml_tooling.cmake"
+        VERBATIM
+    )
+endif()
+
 
 if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
 
@@ -146,7 +172,9 @@ endif()
 
 target_link_libraries(ChatApp
     PUBLIC
+        Qt6::Core
         Qt6::Quick
+        Qt6::QuickControls2
         Qt6::Gui
         Qt6::Widgets
         core::application

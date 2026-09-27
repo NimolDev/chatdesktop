@@ -33,6 +33,7 @@ QString levelName(QtMsgType type)
         return QStringLiteral ("INFO");
         break;
     }
+    return QStringLiteral ("UNKNOW");
 }
 
 void rotateLogIfNeeded()

@@ -37,6 +37,7 @@ QtObject {
     readonly property url icPhoneDown: "qrc:/icons/phone.down.png"
     readonly property url icSpeaker: "qrc:/icons/speaker.png"
     readonly property url icSpeakderSlash: "qrc:/icons/speaker.slash.png"
-    readonly property url icMicrphoneSlahs: "qrc:/icons/microphone.slash.png"
+    readonly property url icMicrophoneSlash: "qrc:/icons/microphone.slash.png"
+    readonly property url icVideoSlash: "qrc:/icons/video.slash.png"
 
 }

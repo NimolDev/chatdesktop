@@ -1,5 +1,4 @@
 #include "conversations_vm.hpp"
-
 #include <QTimer>
 
 
@@ -102,9 +101,4 @@ void ConversationsVM::onFinished()
             emit isLoadingChanged ();
         }
         );
-
-
-
-
 }
-

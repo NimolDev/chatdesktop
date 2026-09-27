@@ -1,12 +1,12 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Layouts
+// import QtQuick.Layouts
 import QtQuick.Controls
 
 
 import Theme
-import Shared.UI
+// import Shared.UI
 import Features.Voip
 
 Window {
@@ -22,20 +22,34 @@ Window {
 
     property bool _isPinned: false
     property bool _isStartCall: false
+    property bool _isAcceptCall: false
 
     width:AppLayouts.minWidth
     height: AppLayouts.minHeight
     minimumWidth: AppLayouts.minWidth
     minimumHeight: AppLayouts.minHeight
     visible: true
-    onClosing: CallVM.reset()
+    onClosing: {
+        CallVM.reset()
+        _isStartCall = false
+        _isAcceptCall = false
+        incomingCall = false
+        incomingVideo = false
+        signalingError = ""
+        _isPinned = false
+        closeTimer.stop()
+        pinnedDialog.close()
+        callState.text = ""
+        console.log("Call window close")
+
+    }
     title: "Call"
     color: Colors.background
 
     // macOS pinning is handled natively by the coordinator to avoid resetting
     // the transparent title bar. Other platforms use the standard Qt hint.
-    flags: Qt.Window | (Qt.platform.os !== "osx" && _isPinned
-                        ? Qt.WindowStaysOnTopHint : 0)
+    flags: Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint
+           | (Qt.platform.os !== "osx" && _isPinned ? Qt.WindowStaysOnTopHint : 0)
     MouseArea {
         anchors.fill: parent
         property point pressPosition
@@ -51,72 +65,19 @@ Window {
                            }
     }
 
-    // Remote video
-    RemoteVideoItem {
-        // anchors {
-        //     top: parent.top
-        //     topMargin: 48
-        //     bottom: parent.bottom
-        //     bottomMargin: 100
-        //     left: parent.left
-        //     right: parent.right
-        // }
-        anchors.fill: parent
-        visible: CallVM.hasRemoteVideo
-        frame: CallVM.remoteVideoFrame
-    }
-
-    // local video
-    Rectangle {
-        id: localPreview
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: 16
-        anchors.bottomMargin: 50
-        width: Math.min(180, callWindow.width * 0.32)
-        height: width * 9 / 16
-        visible: CallVM.hasLocalVideo
-        radius: 12
-        clip: true
-        color: "red"
-
-
-        z: 1
-
-        RemoteVideoItem {
-            id: localPreviewVideo
-            anchors.fill: parent
-            anchors.margins: 1
-            frame: CallVM.localVideoFrame
-            radius: 12
-            // Mirror only the self-preview, leaving transmitted frames unchanged.
-            transform: Scale {
-                origin.x: localPreviewVideo.width / 2
-                xScale: -1
-            }
-        }
-
-
-    }
-
     Connections {
         target: CallVM
-        function onLocalVideoFrameChanged() {
-            if (CallVM.hasLocalVideo) {
-                callWindow.incomingCall = false
-                callWindow._isStartCall = true
-            }
-        }
-        function onRemoteVideoFrameChanged() {
-            if (CallVM.hasRemoteVideo) {
-                callWindow.incomingCall = false
-                callWindow._isStartCall = true
-            }
+
+        function onSessionTerminate()  {
+            console.log("Session Terminate");
+            callWindow.close()
         }
     }
+
 
     Button {
         id: btnPin
+        z: 1
         anchors {
             top: parent.top
             right: parent.right
@@ -149,7 +110,6 @@ Window {
             onClicked: btnPin.clicked()
             cursorShape: Qt.PointingHandCursor
         }
-
     }
 
     Dialog {
@@ -217,272 +177,125 @@ Window {
     }
 
 
-    ColumnLayout {
-        visible: !CallVM.hasRemoteVideo
-        anchors.centerIn: parent
-        width: parent.width
-        spacing: 8
+    Loader {
+        id: callLoader
+        anchors.fill: parent
+        active: callWindow.visible
+        sourceComponent: {
+               if (callWindow._isStartCall || callWindow._isAcceptCall) {
+                   return inStartCallView
+               }
+               if (callWindow.incomingCall) {
+                   return incomingCallView
+               }
+               return callOutView
+           }
+    }
 
-        CircularImage {
-            id: imgProfile
-            Layout.preferredHeight: 80
-            Layout.preferredWidth: 80
-            Layout.alignment: Qt.AlignHCenter
-            source: "qrc:/images/profile.jpeg"
+    Label {
+        id: callState
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
         }
 
-        Column {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
-            Text {
-                id: txtUserName
-                text: callWindow.userName || callWindow.receiverId
-                font.family: Typography.family
-                font.pixelSize: Typography.title4
-                font.weight: Typography.medium
-                color: Colors.primary
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-            Text {
-                id: txtCallStatus
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                text: CallVM.connectionState ||  (callWindow.incomingCall
-                      ? (callWindow.incomingVideo ? "Incoming video call" : "Incoming audio call")
-                      : (callWindow._isStartCall
-                         ? "Calling..." : "Click on Camera if you want to start video call."))
-                color: Colors.textSecond
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                wrapMode: Text.WrapAnywhere
-                elide: Text.ElideRight
-            }
-        }
-        RowLayout {
-            visible: callWindow.incomingCall
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 25
-            spacing: 30
+        z: 1
 
-            Column {
-                // visible: !callWindow.incomingCall
-                spacing: AppLayouts.s_padding
-                CircleButton {
-                    id: btnDecline
-                    Layout.preferredHeight: 40
-                    Layout.preferredWidth: 40
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    padding: AppLayouts.x_padding
-                    iconSource: AppAssets.icPhoneDown
-                    color: Colors.red600
-                    borderWidth: 0
-                    onClicked: {
-                      CallVM.declineCall();
-                      callWindow.close()
-                    }
-                }
+        text: CallVM.connectionState
 
-            }
-            Column {
-                spacing: AppLayouts.s_padding
-                CircleButton {
-                    id: btnAccept
-                    Layout.preferredHeight: 40
-                    Layout.preferredWidth: 40
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    padding: AppLayouts.x_padding
-                    iconSource: AppAssets.icPhone
-                    color: Colors.green200
-                    borderWidth: 0
-                    onClicked: {
-                        // callWindow.close()
-                        CallVM.accept()
+        color: Colors.error
+        wrapMode: Text.Wrap
+    }
 
-                    }
-                }
-
+    Component {
+        id: callOutView
+        CallOutView {
+            anchors.fill: parent
+            // Component.onCompleted: {
+            //     console.log("CallOutView CREATED")
+            // }
+            // Component.onDestruction: {
+            //     console.log("CallOutView DESTROYED")
+            // }
+            onStartCallRequested: (video) => {
+                                    callWindow.signalingError = ""
+                                    callWindow.incomingVideo = video
+                                    callWindow._isStartCall = true
+                                    callWindow.startCallRequested(video)
+                                  }
+            onCancelCall: {
+                callWindow.close()
             }
         }
     }
 
-    // ---- Call button ----
-    RowLayout {
-        visible: !callWindow._isStartCall && !callWindow.incomingCall
-        // visible: false
-        anchors {
-            bottom: parent.bottom
-            bottomMargin: 12
-            horizontalCenter: parent.horizontalCenter
-        }
 
-        spacing: 20
+    Component {
+        id: inStartCallView
+        InStartCallView {
+            anchors.fill: parent
+            viewmodel: CallVM
+            isVideoCall: callWindow.incomingVideo
 
-        Column {
-            // visible: !callWindow.incomingCall
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnVideo
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icVideo
-                color: Colors.primary700
-                borderWidth: 0
-                onClicked: {
-                    callWindow.signalingError = ""
-                    callWindow._isStartCall = true
-                    callWindow.startCallRequested(true)
-                    // CallVM.startCall(true)
+            // Component.onCompleted: {
+            //     console.log("InStartCall CREATED")
+            // }
+            // Component.onDestruction: {
+            //     console.log("InStartCall DESTROYED")
+            // }
 
-                }
-            }
-            Text {
-                text: "Start Video"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
+            onEndCall: {
+                CallVM.endCall()
+                callWindow.close()
 
             }
-        }
-        Column {
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnCancel
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icClose
-                color: Colors.black300
-                borderWidth: 0
-                onClicked: {
-                    callWindow._isStartCall = false
-                    callWindow.close()
+            onMuteChanged: (mute) => {
+                               if (mute) {
+                                   console.log("mute mic")
+                               } else {
+                                   console.log("unmute mic")
+                               }
+                           }
+            onSpeakerChanged: (mute) => {
+                                  if (mute) {
+                                      console.log("mute speaker")
+                                  } else {
+                                      console.log("umute speaker")
+                                  }
 
-                }
-            }
-            Text {
-                text: "Cancel"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
-        Column {
-            // visible: !callWindow.incomingCall
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnAudio
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icPhone
-                color: Colors.primary700
-                borderWidth: 0
-                onClicked: {
-                    callWindow.signalingError = ""
-                    callWindow._isStartCall = true
-                    callWindow.startCallRequested(false)
-                }
-            }
-            Text {
-                text: "Start Call"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
+                              }
+            onCameraChanged: (enable) => {
+                                 if (enable) {
+                                     console.log("enable camera")
+                                 } else {
+                                     console.log("disable camera")
+                                 }
+                             }
         }
     }
-    // ---- In Connected Call ----
-    RowLayout {
-        visible: callWindow._isStartCall
-        anchors {
-            bottom: parent.bottom
-            bottomMargin: 12
-            horizontalCenter: parent.horizontalCenter
-         }
-        spacing: 20
 
-        Column {
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnSpeaker
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icVideo
-                color: Colors.primary700
-                borderWidth: 0
-            }
-            Text {
-                text: "Speaker"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
-        Column {
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnEnd
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icPhoneDown
-                color: Colors.error
-                borderWidth: 0
-                onClicked: {
-                    CallVM.endCall();
-                    callWindow._isStartCall = false
-                    callWindow.close()
+    Component {
+        id: incomingCallView
+        InComingCallView {
+            anchors.fill: parent
+            // Component.onCompleted: {
+            //     console.log("incomingCallView CREATED")
+            // }
+            // Component.onDestruction: {
+            //     console.log("incomingCallView DESTROYED")
+            // }
 
-                }
-            }
-            Text {
-                text: "End Call"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
-        Column {
-            spacing: AppLayouts.s_padding
-            CircleButton {
-                id: btnMute
-                Layout.preferredHeight: 40
-                Layout.preferredWidth: 40
-                anchors.horizontalCenter: parent.horizontalCenter
-                padding: AppLayouts.x_padding
-                iconSource: AppAssets.icMicrophone
-                color: Colors.primary700
-                borderWidth: 0
-                onClicked: {
+            isVideoCall: callWindow.incomingVideo
 
-                }
-
+            onAcceptCall:  {
+                callWindow.signalingError = ""
+                console.log("Accept call")
+                callWindow._isAcceptCall = true
+                CallVM.accept()
             }
-            Text {
-                text: "Mute"
-                font.family: Typography.family
-                font.pixelSize: Typography.body
-                font.weight: Typography.medium
-                color: Colors.textPrimary
-                anchors.horizontalCenter: parent.horizontalCenter
+            onDeclineCall:  {
+                CallVM.declineCall()
+                callWindow.close()
             }
         }
     }

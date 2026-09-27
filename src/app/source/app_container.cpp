@@ -27,9 +27,13 @@
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
 #include "chat/presentation/viewmodel/home_chat_vm.hpp"
 
+
+
 AppContainer::AppContainer()
 {
-    setupXmpp ();
+
+    setupXmpp();
+
     registerCoreService ();
     registerAppController ();
     registerAuthentication ();

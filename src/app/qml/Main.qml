@@ -21,10 +21,19 @@ ApplicationWindow {
     minimumHeight: AppLayouts.minHeight
     visible: true
     title: AppController.userName
+    color: Colors.error
 
-    Component.onCompleted: {
-        AppController.checkAuthentication()
-    }
+    // property bool lightMode: Application.styleHints.colorScheme === Qt.Light
+    // property color reallyDark: "#1f1f1f"
+    // property color dark: "#262626"
+    // property color reallyLight: "#e7e7e7"
+    property color light: Colors.primary
+    // color: "black"
+
+    readonly property Window aboutDialog: aboutDialogLoader.item as Window
+    menuBar:  Qt.platform.os === "osx" ? menuBar : null
+
+    Component.onCompleted: AppController.checkAuthentication()
 
     onClosing: function(close) {
         close.accepted = false
@@ -66,11 +75,34 @@ ApplicationWindow {
             aboutWindow.hide()
         })
     }
-
     Loader {
         id: pageLoader
         anchors.fill: parent
         sourceComponent: loadingPage
+    }
+    Loader {
+        id: aboutDialogLoader
+        active: false
+        sourceComponent: Component {
+            AboutDialog {
+                onClosing: Qt.callLater(function() {
+                    aboutDialogLoader.active = false
+                })
+            }
+        }
+    }
+
+    Loader {
+        id: pageLoader
+        anchors.fill: parent
+        // color: Colors.background
+        sourceComponent: background
+    }
+    Component {
+        id: background
+        Rectangle {
+            color: Colors.background
+        }
     }
     Component {
         id: loadingPage

@@ -5,6 +5,8 @@
 #include <QString>
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
 
+#include "platform/platform_main_window.hpp"
+
 class QWindow;
 class QQmlEngine;
 class CallVM;
@@ -35,4 +37,6 @@ private:
     QMetaObject::Connection m_callConnection;
     QPointer<CallVM> m_callViewModel;
     QPointer<QWindow> m_callWindow;
+
+    core::platform::PlatformMainWindow m_window;
 };

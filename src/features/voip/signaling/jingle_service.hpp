@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QObject>
-#include <QImage>
+#include <QVideoFrame>
 #include <QPointer>
 #include "webrtc/webrtc_client.hpp"
 #include "jingle_extension.hpp"
@@ -19,6 +19,9 @@ public:
     explicit JingleService(QObject *parent = nullptr);
 
 public slots:
+    void setAudioInputDevice(const QAudioDevice &device);
+    void setAudioOutputDevice(const QAudioDevice &device);
+    void setCameraDevice(const QCameraDevice &device);
     void initialize(QXmppClient *client);
     void startCall(const QString &receiverId, bool video = false);
     void acceptCall();
@@ -26,6 +29,7 @@ public slots:
     void rejectCall();
     void ringing();
 
+    void prepare();
 
 public slots:
     void onLocalIceCandidateReceived(const QString &candidate, const QString &sdpMid, int sdpMLineIndex);
@@ -34,21 +38,35 @@ public slots:
     void onExchangeIceCandidateReceived(const std::string &sdp, const std::string &sdpMid, const int sdpMLineIndex);
 
 signals:
-    void localVideoFrameReady(const QImage &image);
-    void remoteVideoFrameReady(const QImage &image);
-    void messageReceived(const QString &action, const QString &sender,
-                         const QString &sessionId,
-                         const QList<voip::signaling::jingle::StreamType> &streams,
-                         const QString &reason);
+    void localVideoFrameReady(const QVideoFrame &frame);
+    void remoteVideoFrameReady(const QVideoFrame &frame);
+
     void proposalSent(const QString &recipient, const QString &proposalId);
-    void proposalReceived(const QString &sender,
-                          const QList<voip::signaling::jingle::StreamType> &streams);
+
     void signalingFailed(const QString &reason);
     void localIceCandidateReceived(const QString &candidate, const QString &sdpMid, int sdpMLineIndex);
 
+    void sessionTerminate();
+
     void connectionStateChange(const core::rtc::ConnectionState &state);
+    void callStateChange(const voip::signaling::CallState &state);
+
+
+    // Jingle Message
+    void proposeReceived(const QString from,
+                         QList<voip::signaling::jingle::StreamType> types);
+    void retractReceived(const QString &retract, const QString &mid);
+    void ringingReceived(const QString &ringing, const QString &mid);
+    void proceedReceived(const QString &proceed, const QString &mid);
+    void rejectReceived(const QString &reject, const QString &mid);
+    void acceptReceived(const QString &accept, const QString &mid);
+    void finishReceived(const QString &finish, const QString &mid);
+
 
 private:
+    QAudioDevice m_audioInput;
+    QAudioDevice m_audioOutput;
+    QCameraDevice m_cameraDevice;
     QPointer<voip::signaling::JingleExtension> m_jingle;
     QPointer<QXmppClient> m_client;
 
@@ -56,6 +74,9 @@ private:
      std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
 
     void createWebrtcClient();
+    bool prepareMedia(bool video);
+    bool m_mediaPrepared = false;
+    bool m_callStarted = false;
     bool isConnected();
     bool m_videoCall = false;
 

@@ -22,6 +22,38 @@ JingleService::JingleService(QObject *parent)
 
 }
 
+void JingleService::prepare()
+{
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, &JingleService::prepare, Qt::QueuedConnection);
+        return;
+    }
+    if (!m_callStarted && prepareMedia(false)) {
+        m_webrtc->prepare();
+    }
+
+}
+
+bool JingleService::prepareMedia(bool video)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (!m_webrtc) {
+        createWebrtcClient();
+    }
+    m_webrtc->setCameraEnabled(video);
+    if (m_mediaPrepared) {
+        return true;
+    }
+    if (!m_webrtc->initialize()) {
+        m_webrtc->setCameraEnabled(false);
+        m_webrtc.reset();
+        emit signalingFailed(QStringLiteral("Cannot initialize WebRTC for the call"));
+        return false;
+    }
+    m_mediaPrepared = true;
+    return true;
+}
+
 void JingleService::initialize(QXmppClient *client)
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -37,26 +69,123 @@ void JingleService::initialize(QXmppClient *client)
     }
 
     m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (m_client, this);
+
+    // -- Jingle Message ----
     connect(m_jingle, &voip::signaling::JingleExtension::proposeReceived,
             this, &JingleService::onProposeReceived);
     connect(m_jingle,
             &voip::signaling::JingleExtension::acceptReceived,
             this,
-            [this](const QString &sender, const QString &) {
-                if (QXmppUtils::jidToBareJid(sender) != QXmppUtils::jidToBareJid(m_recipientId)) {
+            [this](const QString &accept, const QString &mid) {
+                if (QXmppUtils::jidToBareJid(accept) != QXmppUtils::jidToBareJid(m_recipientId)) {
                     return;
                 }
-                if (QXmppUtils::jidToResource(sender).isEmpty()) {
+                if (QXmppUtils::jidToResource(accept).isEmpty()) {
                     emit signalingFailed(QStringLiteral("Cannot start session: acceptance is missing the peer resource"));
                     return;
                 }
-                m_recipientId = sender;
+                m_recipientId = accept;
                 // m_client->removeExtension ();
-                LOG_INFO ("Call accept");
+                // LOG_INFO ("Call accept");
                 // waiting to external service dicovery response and send sessio initiate.
                 m_discovery->requestExtDiscoQuery (QStringLiteral ("localhost"));
+                emit acceptReceived (accept, mid);
+            });
+    connect(m_jingle,
+            &voip::signaling::JingleExtension::ringingReceived,
+            this,
+            &JingleService::ringingReceived);
+
+    connect(m_jingle,
+            &voip::signaling::JingleExtension::retractReceived,
+            this,
+            &JingleService::retractReceived);
+    connect(m_jingle,
+            &voip::signaling::JingleExtension::rejectReceived,
+            this,
+            &JingleService::rejectReceived);
+    connect(m_jingle,
+            &voip::signaling::JingleExtension::proceedReceived,
+            this,
+            &JingleService::proceedReceived);
+    connect(m_jingle,
+            &voip::signaling::JingleExtension::finishReceived,
+            this,
+            &JingleService::finishReceived);
+
+    connect (m_jingle,
+            &voip::signaling::JingleExtension::callStateChange,
+            this,
+            [this](const voip::signaling::CallState &state) {
+                emit callStateChange (state);
             });
 
+
+    // --- External Service discovery ----
+    connect(m_discovery.get (),
+            &core::xmpp::XmppServiceDiscovery::externalServiceReceived,
+            this,
+            [this](const QVector<QXmppExternalService> &services) {
+                if (!m_webrtc) {
+                    return;
+                }
+                LOG_INFO ("Extenal service receive");
+                QList<IceServer> ice_servers;
+                QList<core::rtc::IceServer> rtcIceServers;
+                for (auto const &service : services) {
+                    const auto type = IceServer::toType(service.type());
+                    if (!type) {
+                        continue;
+                    }
+                    IceServer ice;
+
+                    ice.type = *type;
+                    ice.host = service.host ();
+                    auto port = service.port();
+                    if (port.has_value ()) {
+                        ice.port = QString::number(*port);
+                    }
+                    auto username = service.username ();
+                    if (username.has_value ()) {
+                        ice.username = username.value ();
+                    }
+                    auto credential = service.password ();
+                    if (credential.has_value ()) {
+                        ice.credential = credential.value ();
+                    }
+                    core::rtc::IceServer rtcIce;
+                    switch (ice.type) {
+                    case IceServer::Stun:
+                        rtcIce.type = core::rtc::IceServer::Stun;
+                        break;
+                    case IceServer::Turn:
+                        rtcIce.type = core::rtc::IceServer::Turn;
+                        break;
+                    case IceServer::Turns:
+                        rtcIce.type = core::rtc::IceServer::Turns;
+                        break;
+                    }
+                    rtcIce.host = ice.host;
+                    rtcIce.port = ice.port;
+                    rtcIce.username = ice.username;
+                    rtcIce.credential = ice.credential;
+                    rtcIceServers.append(std::move(rtcIce));
+                    ice_servers.append (std::move (ice));
+                }
+                if (!m_webrtc->createPeerConnection(rtcIceServers)) {
+                    emit signalingFailed(QStringLiteral("Cannot create the peer connection for the local offer"));
+                    return;
+                }
+                const QPointer<JingleService> self(this);
+                const QPointer<core::rtc::WebrtcClient> rtc(m_webrtc.get ());
+                rtc->createOffer ([self, ice_servers](const QString &sdp_offer) {
+                    if (self && self->m_jingle) {
+                        self->m_jingle->sessionInitaite(self->m_recipientId,sdp_offer, ice_servers);
+                    }
+                });
+            });
+
+    // ---- Jingle Action ----
     connect(this, &JingleService::localIceCandidateReceived,
             m_jingle, &JingleExtension::iceCandidate);
 
@@ -121,68 +250,7 @@ void JingleService::initialize(QXmppClient *client)
             &JingleService::onExchangeIceCandidateReceived
             );
 
-    connect(m_discovery.get (),
-            &core::xmpp::XmppServiceDiscovery::externalServiceReceived,
-            this,
-            [this](const QVector<QXmppExternalService> &services) {
-                if (!m_webrtc) {
-                    return;
-                }
-                LOG_INFO ("Extenal service receive");
-                QList<IceServer> ice_servers;
-                QList<core::rtc::IceServer> rtcIceServers;
-                for (auto const &service : services) {
-                    const auto type = IceServer::toType(service.type());
-                    if (!type) {
-                        continue;
-                    }
-                    IceServer ice;
 
-                    ice.type = *type;
-                    ice.host = service.host ();
-                    auto port = service.port();
-                    if (port.has_value ()) {
-                        ice.port = QString::number(*port);
-                    }
-                    auto username = service.username ();
-                    if (username.has_value ()) {
-                        ice.username = username.value ();
-                    }
-                    auto credential = service.password ();
-                    if (credential.has_value ()) {
-                        ice.credential = credential.value ();
-                    }
-                    core::rtc::IceServer rtcIce;
-                    switch (ice.type) {
-                    case IceServer::Stun:
-                        rtcIce.type = core::rtc::IceServer::Stun;
-                        break;
-                    case IceServer::Turn:
-                        rtcIce.type = core::rtc::IceServer::Turn;
-                        break;
-                    case IceServer::Turns:
-                        rtcIce.type = core::rtc::IceServer::Turns;
-                        break;
-                    }
-                    rtcIce.host = ice.host;
-                    rtcIce.port = ice.port;
-                    rtcIce.username = ice.username;
-                    rtcIce.credential = ice.credential;
-                    rtcIceServers.append(std::move(rtcIce));
-                    ice_servers.append (std::move (ice));
-                }
-                if (!m_webrtc->createPeerConnection(rtcIceServers)) {
-                    emit signalingFailed(QStringLiteral("Cannot create the peer connection for the local offer"));
-                    return;
-                }
-                const QPointer<JingleService> self(this);
-                const QPointer<core::rtc::WebrtcClient> rtc(m_webrtc.get ());
-                rtc->createOffer ([self, ice_servers](const QString &sdp_offer) {
-                    if (self && self->m_jingle) {
-                        self->m_jingle->sessionInitaite(self->m_recipientId,sdp_offer, ice_servers);
-                    }
-                });
-            });
     connect (m_jingle,
             &JingleExtension::remoteSdpAnswerReceived,
             this,
@@ -191,16 +259,30 @@ void JingleService::initialize(QXmppClient *client)
                     emit signalingFailed(QStringLiteral("Cannot apply the remote SDP answer"));
                 }
             });
+    connect(m_jingle,
+            &JingleExtension::sessionTerminateReceived,
+            this,
+            [this](bool terminate) {
+                LOG_INFO ("Session ternimate");
+                emit sessionTerminate ();
+            });
+
 
 }
 
 void JingleService::createWebrtcClient()
 {
-    emit localVideoFrameReady(QImage());
-    emit remoteVideoFrameReady(QImage());
+    m_mediaPrepared = false;
+    emit localVideoFrameReady(QVideoFrame());
+    emit remoteVideoFrameReady(QVideoFrame());
     m_webrtc = std::make_unique<core::rtc::WebrtcClient>(this);
+    m_webrtc->setAudioInputDevice(m_audioInput);
+    m_webrtc->setAudioOutputDevice(m_audioOutput);
+    m_webrtc->setCameraDevice(m_cameraDevice);
+    // This forwards only a signal; queuing it here would stall the preview
+    // while this thread initializes WebRTC. The repository queues it to the UI.
     connect(m_webrtc.get(), &core::rtc::WebrtcClient::localVideoFrameReady,
-            this, &JingleService::localVideoFrameReady);
+            this, &JingleService::localVideoFrameReady, Qt::DirectConnection);
     connect(m_webrtc.get(), &core::rtc::WebrtcClient::remoteVideoFrameReady,
             this, &JingleService::remoteVideoFrameReady);
     connect(m_webrtc.get(), &core::rtc::WebrtcClient::localIceCandidateGenerated,
@@ -221,14 +303,15 @@ void JingleService::createWebrtcClient()
                     break;
                 case core::rtc::ConnectionState::Connected:
                     qDebug() << "Connected";
+                    emit callStateChange (CallState::Connected);
                     break;
                 case core::rtc::ConnectionState::Disconnect:
                     qDebug() << "Disconnect";
+                    emit callStateChange (CallState::Reconnect);
                     break;
                 }
                 emit connectionStateChange (state);
             });
-
 }
 
 void JingleService::onLocalIceCandidateReceived(const QString &candidate, const QString &sdpMid, int sdpMLineIndex)
@@ -242,7 +325,7 @@ void JingleService::onExchangeIceCandidateReceived(
     const int sdpMLineIndex)
 {
     m_webrtc->setRemoteCandidate (sdp, sdpMid, sdpMLineIndex);
-    LOG_INFO ("ICE Exchange");
+    // LOG_INFO ("ICE Exchange");
 }
 
 void JingleService::acceptCall()
@@ -252,16 +335,12 @@ void JingleService::acceptCall()
         return;
     }
     if (isConnected ()) {
-        createWebrtcClient();
-        if (!m_webrtc->initialize()) {
-            emit signalingFailed(QStringLiteral("Cannot initialize WebRTC for the call"));
-            m_webrtc.reset();
+        if (!prepareMedia(m_videoCall)) {
             return;
         }
-        m_webrtc->setCameraEnabled(m_videoCall);
+        m_callStarted = true;
         m_jingle->sendAccept();
     }
-
 }
 
 void JingleService::endCall()
@@ -270,9 +349,21 @@ void JingleService::endCall()
         QMetaObject::invokeMethod(this, &JingleService::endCall, Qt::QueuedConnection);
         return;
     }
-    m_webrtc.reset();
-    emit localVideoFrameReady(QImage());
-    emit remoteVideoFrameReady(QImage());
+    if (m_callStarted && m_client && m_jingle && m_client->isConnected()) {
+        m_jingle->sessionTerminate();
+    }
+    // Stop preview capture even if signaling disconnected while ringing.
+    if (m_webrtc) {
+        m_webrtc->setCameraEnabled(false);
+        m_webrtc->setEnableSpeaker(false);
+        m_webrtc->closeConnection();
+        m_webrtc.reset();
+    }
+    m_mediaPrepared = false;
+    m_callStarted = false;
+    emit localVideoFrameReady(QVideoFrame());
+    emit remoteVideoFrameReady(QVideoFrame());
+
 }
 
 void JingleService::rejectCall()
@@ -283,7 +374,9 @@ void JingleService::rejectCall()
     }
     if (isConnected ()) {
         m_jingle->reject ();
-        m_webrtc = NULL;
+        m_webrtc.reset();
+        m_mediaPrepared = false;
+        m_callStarted = false;
     }
 }
 
@@ -323,30 +416,20 @@ void JingleService::startCall(const QString &receiverId, bool video)
 
     m_recipientId = recipient;
     m_videoCall = video;
-    createWebrtcClient();
-    if (!m_webrtc->initialize()) {
-        emit signalingFailed(QStringLiteral("Cannot initialize WebRTC for the outgoing call"));
-        m_webrtc.reset();
+
+    emit callStateChange(CallState::Calling);
+    if (!prepareMedia(video)) {
         return;
     }
-    m_webrtc->setCameraEnabled(video);
+    m_callStarted = true;
+
+    m_webrtc->createLocalCameraTrack ();
     using voip::signaling::jingle::StreamType;
     QList<StreamType> streams {StreamType::Audio};
     if (video) {
         streams.append(StreamType::Video);
     }
-    const QString proposalId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    voip::signaling::jingle::JingleMessage builder;
-    auto message = builder.propose(recipient, streams, proposalId);
-    message.setId(QUuid::createUuid().toString(QUuid::WithoutBraces));
-    m_client->send(std::move(message)).then(this,
-        [this, recipient, proposalId](QXmpp::SendResult result) {
-            if (const auto *error = std::get_if<QXmppError>(&result)) {
-                emit signalingFailed(QStringLiteral("Could not send call proposal: ") + error->description);
-                return;
-            }
-            emit proposalSent(recipient, proposalId);
-        });
+    m_jingle->propose (recipient, video);
 
 }
 
@@ -355,7 +438,8 @@ void JingleService::onProposeReceived(
 {
     qDebug() << "===== on Propose received from:"<< sender << "=====";
     m_videoCall = streams.contains(jingle::StreamType::Video);
-    emit proposalReceived (sender, streams);
+    // emit proposalReceived (sender, streams);
+    emit proposeReceived (sender, streams);
 }
 
 bool JingleService::isConnected()
@@ -369,3 +453,27 @@ bool JingleService::isConnected()
 
 } // namespace signaling
 } // namespace voip
+
+void voip::signaling::JingleService::setAudioInputDevice(const QAudioDevice &device)
+{
+    m_audioInput = device;
+    if (m_webrtc) {
+        m_webrtc->setAudioInputDevice(device);
+    }
+}
+
+void voip::signaling::JingleService::setAudioOutputDevice(const QAudioDevice &device)
+{
+    m_audioOutput = device;
+    if (m_webrtc) {
+        m_webrtc->setAudioOutputDevice(device);
+    }
+}
+
+void voip::signaling::JingleService::setCameraDevice(const QCameraDevice &device)
+{
+    m_cameraDevice = device;
+    if (m_webrtc) {
+        m_webrtc->setCameraDevice(device);
+    }
+}

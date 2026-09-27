@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QLockFile>
 #include <QStandardPaths>
+#include <QQuickStyle>
 
 #include "application/app_info.hpp"
 #include "localization/language_manager.hpp"
@@ -23,17 +24,39 @@
 
 #include "logging/logger.hpp"
 
-#ifdef Q_OS_MACOS
-#include "platform/macos/macos_menu_bar.hpp"
-#include "platform/macos/macos_tray_icon.hpp"
-#include "platform/macos/notification.hpp"
-#include "platform/macos/pet_window.hpp"
-#endif
 
-
-
+#include "platform/platform_main_window.hpp"
+#include "platform/platform_tray.hpp"
+#include "platform/platform_menu.hpp"
+#include "platform/platform_notification.hpp"
 
 namespace  {
+#ifdef QT_QML_DEBUG
+bool isQmlPreviewSession(int argc, char *argv[])
+{
+    for (int index = 1; index < argc; ++index) {
+        const QString argument = QString::fromLocal8Bit(argv[index]);
+        if (!argument.startsWith(QStringLiteral("-qmljsdebugger="))) {
+            continue;
+        }
+        const auto options = argument.mid(QStringLiteral("-qmljsdebugger=").size())
+                                 .split(QLatin1Char(','));
+        bool services = false;
+        for (const QString &option : options) {
+            if (option.startsWith(QStringLiteral("services:"))) {
+                services = true;
+                if (option.mid(9) == QStringLiteral("QmlPreview")) {
+                    return true;
+                }
+            } else if (services && option == QStringLiteral("QmlPreview")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+#endif
+
 void initializedFont() {
     shared::theme::FontManager::initialize ();
 }
@@ -91,13 +114,19 @@ void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
         );
 }
 
-
-
 } // namespace
 
 
 int main(int argc, char *argv[])
 {
+#ifdef QT_QML_DEBUG
+    // QApplication consumes Qt's debugger argument during construction.
+    const bool qmlPreviewSession = isQmlPreviewSession(argc, argv);
+#endif
+#ifdef Q_OS_MACOS
+    qputenv("QT_MEDIA_BACKEND", "darwin");
+#endif
+    QQuickStyle::setStyle("Basic");
     QApplication app(argc, argv);
 
     core::logging::Logger::initialize ();
@@ -112,6 +141,8 @@ int main(int argc, char *argv[])
     // when an alert is clicked. Stop that second process before it constructs
     // another QML engine/window. Keep the lock alive for the entire main().
 
+
+#ifdef QT_NO_DEBUG
     // const QString instanceLockPath = QDir(
     //     QStandardPaths::writableLocation(QStandardPaths::TempLocation)
     //     ).filePath(core::application::AppInfo::bundleIdentifier()
@@ -121,7 +152,7 @@ int main(int argc, char *argv[])
     //     qInfo() << "ChatApp is already running; refusing duplicate launch";
     //     return EXIT_SUCCESS;
     // }
-
+#endif
     app.setQuitOnLastWindowClosed (false);
 
     // Container-owned QML singletons must outlive the QML engine. Local
@@ -130,6 +161,19 @@ int main(int argc, char *argv[])
     AppContainer app_container;
     QQmlApplicationEngine engine;
     appEngineRegister (app, engine);
+
+#ifdef QT_QML_DEBUG
+    if (qmlPreviewSession) {
+        app.setQuitOnLastWindowClosed(true);
+        // Let Qt's preview service own the window: it creates a host for an
+        // Item or uses the selected component's Window. A separate host here
+        // would survive preview reloads and introduce an extra window.
+        const int result = app.exec();
+        core::logging::Logger::shutdown();
+        return result;
+    }
+#endif
+
     // Destroy the coordinator and its windows before the QML engine.
     CallCoordinator callCoordinator(app_container, engine);
 
@@ -160,101 +204,31 @@ int main(int argc, char *argv[])
         qWarning() << "Root object it not a QWindow";
         return EXIT_FAILURE;
     }
+    core::platform::PlatformMainWindow platform;
+    platform.setup(window);
+    platform.setTitleBarColor (window, QColor(0x1B1B1B));
+
+    core::platform::PlatformTray tray;
+    tray.setup (window, &app);
+    tray.showTrayIcon ();
+    tray.setTooltip (QStringLiteral ("ChatApp"));
+    tray.updateIcon ();
 
 
+    tray.setQuitCallback ([&app] {
+        app.quit ();
+    });
+    core::platform::PlatformMenu appMenu;
+    appMenu.setup();
 
-#ifdef Q_OS_MACOS
-
-    platform::macos::Notification::instance ().requestPermission ();
-
-    platform::macos::MacosMenuBar menuBar(&app, window);
-    MacosTrayIcon trayIcon(&app, window);
-    trayIcon.setBadgeNumber (99);
-
-
-
-
-#else
-
-    QSystemTrayIcon trayIcon;
-    trayIcon.setIcon(QIcon(":/images/1024.png"));
-    trayIcon.setToolTip("ChatApp");
-
-    QMenu trayMenu;
-    QAction *openAction = trayMenu.addAction("Open ChatApp");
-    QAction *notificationAction = trayMenu.addAction("Disable Notification");
-    trayMenu.addSeparator();
-    QAction *quitAction = trayMenu.addAction("Quit ChatApp");
-
-    trayIcon.show();
-
-    const auto restoreWindow = [window]() {
-        window->show();
-        window->raise();
-        window->requestActivate();
-    };
-
-    QObject::connect(
-        &trayIcon,
-        &QSystemTrayIcon::activated,
-        [restoreWindow, &trayMenu, &trayIcon](QSystemTrayIcon::ActivationReason reason) {
-            if (reason == QSystemTrayIcon::Trigger) {
-                restoreWindow();
-            } else if (reason == QSystemTrayIcon::Context) {
-                const QRect trayGeometry = trayIcon.geometry();
-                const QSize menuSize = trayMenu.sizeHint();
-                QScreen *screen = QGuiApplication::screenAt(trayGeometry.center());
-
-                if (!screen) {
-                    screen = QGuiApplication::primaryScreen();
-                }
-
-                const QRect availableGeometry = screen->availableGeometry();
-                int x = trayGeometry.center().x() - menuSize.width() / 2;
-                x = qBound(
-                    availableGeometry.left(),
-                    x,
-                    availableGeometry.right() - menuSize.width() + 1
-                    );
-
-                const int spaceBelow =
-                    availableGeometry.bottom() - trayGeometry.bottom();
-                const int y = spaceBelow >= menuSize.height()
-                                  ? trayGeometry.bottom() + 1
-                                  : trayGeometry.top() - menuSize.height();
-
-                trayMenu.popup(QPoint(x, y));
-            }
-        }
-        );
-
-    QObject::connect(openAction, &QAction::triggered, restoreWindow);
-
-    QObject::connect(
-        notificationAction,
-        &QAction::triggered,
-        [notificationAction]() {
-            const bool notificationsDisabled =
-                notificationAction->text() == "Disable Notification";
-            notificationAction->setText(
-                notificationsDisabled
-                    ? "Enable Notification"
-                    : "Disable Notification"
-                );
-        }
-        );
-
-    QObject::connect(quitAction, &QAction::triggered, &app, &QApplication::quit);
-#endif
+    core::platform::PlaformNotification notifcation;
+    notifcation.requestPermission ();
 
     QObject::connect (
         app_container.home_chat,
         &HomeChatVM::messageReceived,
-        [](const domain::entity::MessageItem &payload) {
-            // LOG_INFO(QStringLiteral ("Message received %1").arg (payload.body.content.text));
-#ifdef Q_OS_MACOS
-            platform::macos::Notification::instance ().show (payload.sender_id, payload.body.content.text);
-#endif
+        [&notifcation](const domain::entity::MessageItem &payload) {
+            notifcation.show ("Hello", "test");
         }
         );
 
