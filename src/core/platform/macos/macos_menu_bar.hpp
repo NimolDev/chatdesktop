@@ -1,5 +1,8 @@
 #pragma once
 
+#include <QApplication>
+#include <QWindow>
+
 class QApplication;
 class QWindow;
 

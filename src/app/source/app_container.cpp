@@ -1,6 +1,11 @@
 #include "app_container.hpp"
 #include "app_controller.hpp"
 
+#include "voip/signaling/jingle_service.hpp"
+#include "voip/data/call_repository_impl.hpp"
+#include "voip/domain/usecase/call_use_case.hpp"
+#include "voip/presentation/viewmodel/call_vm.hpp"
+
 #include "constants/app_constants.hpp"
 #include "repository/conversations_repository_impl.hpp"
 
@@ -29,6 +34,7 @@ AppContainer::AppContainer()
     registerAppController ();
     registerAuthentication ();
     registerChat ();
+    registerVoip();
 }
 
 AppContainer::~AppContainer()
@@ -42,6 +48,9 @@ void AppContainer::setupXmpp()
     m_xmppThread->setObjectName(QStringLiteral("XmppThread"));
 
     auto *xmpp = new core::xmpp::XmppManager();
+    m_jingleService = new voip::signaling::JingleService(xmpp);
+    QObject::connect(xmpp, &core::xmpp::XmppManager::clientInitialized,
+                     m_jingleService, &voip::signaling::JingleService::initialize);
     xmpp->moveToThread(m_xmppThread);
     m_xmpp = std::shared_ptr<core::xmpp::XmppManager>(
         xmpp,
@@ -112,6 +121,10 @@ void AppContainer::registerCoreService()
     });
     m_container.registerSingleton<core::xmpp::XmppManager> ([this](ServiceContainer &) {
         return m_xmpp;
+    });
+    m_container.registerSingleton<voip::signaling::JingleService>([this](ServiceContainer &) {
+        // Keep the owning manager alive while a feature uses the service.
+        return std::shared_ptr<voip::signaling::JingleService>(m_xmpp, m_jingleService);
     });
 }
 
@@ -209,14 +222,20 @@ void AppContainer::registerChat()
 }
 
 
-
-
-
-
-
-
-
-
+void AppContainer::registerVoip()
+{
+    m_container.registerSingleton<domain::CallRepository>([](ServiceContainer &c) {
+        return std::make_shared<data::CallRepositoryImpl>(
+            c.resolve<voip::signaling::JingleService>());
+    });
+    m_container.registerSingleton<domain::CallUseCase>([](ServiceContainer &c) {
+        return std::make_shared<domain::CallUseCase>(c.resolve<domain::CallRepository>());
+    });
+    m_container.registerSingleton<CallVM>([](ServiceContainer &c) {
+        return std::make_shared<CallVM> (c.resolve<domain::CallUseCase> ());
+    });
+    CallVM::setInstance(m_container.resolve<CallVM>().get());
+}
 
 
 

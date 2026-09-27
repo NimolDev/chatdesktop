@@ -29,7 +29,6 @@ Page {
             if (switchId !== d.switchId)
                 return
 
-            MessagingViewModel.resetModel()
             chatPage.resetMessagingStateRequested()
             d.itemSelectedIndex = index
             chatPage.receiverId = userId
@@ -37,7 +36,6 @@ Page {
             loaderMessage.opacity = 1
             loaderMessage.x = 0
             MessagingViewModel.fetchMessage(userId)
-
         }
 
         // There is nothing useful to freeze before the first conversation.
@@ -275,6 +273,11 @@ Page {
                     // anchors.fill: parent
                     model: MessagingViewModel
                     userName: chatPage.selectUserName
+                    onCallRequested: {
+                        if (chatPage.receiverId) {
+                            MessagingViewModel.requestCall(chatPage.receiverId, chatPage.selectUserName)
+                        }
+                    }
                     isVisible: !MessagingViewModel.isLoading
                     onMessageSubmitted: msg => {
                         MessagingViewModel.sendMessage(chatPage.receiverId, msg);

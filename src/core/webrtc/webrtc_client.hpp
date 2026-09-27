@@ -1,24 +1,43 @@
 #ifndef CORE_WEBRTC_WEBRTC_CLIENT_HPP
 #define CORE_WEBRTC_WEBRTC_CLIENT_HPP
 
+
+#include "ice_server.hpp"
+#ifdef _WIN32
+#include "webrtc_export.hpp"
+#else
+#define WEBRTC_EXPORT
+#endif
+
 #include <QObject>
+#include <QImage>
+#include <QList>
+#include <functional>
+#include <memory>
+#include <string>
 
 
-#include "peer_connection_observer.hpp"
-#include "sdp_observer.hpp"
-
-#include "api/peer_connection_interface.h"
-#include "api/video/video_frame.h"
-
-
-
+namespace webrtc {
+class VideoFrame;
+class IceCandidate;
+using IceCandidateInterface = IceCandidate;
+}
 
 namespace core {
 namespace rtc {
 
 class WebRtcClientPrivate;
 
-class WebrtcClient : public QObject
+enum class ConnectionState
+{
+    Checking,
+    Connecting,
+    Connected,
+    Disconnect
+
+};
+
+class WEBRTC_EXPORT WebrtcClient : public QObject
 {
     Q_OBJECT
 public:
@@ -27,22 +46,58 @@ public:
 
     bool initialize();
 
-    // void startCall(const QString &user_id);
-    // void handleOffer(const QString &sdp);
+    bool createPeerConnection(const QList<core::rtc::IceServer> &iceServers);
 
-    // void addIceCandidate(
-    //     const QString *mid,
-    //     int mlineIndex,
-    //     const QString &candidate);
-    bool createPeerConnection();
+    using SdpCompletionHandler = std::function<void(const QString &sdp)>;
 
-    void createOffer();
+    // Called on this object's Qt thread after the local description is set.
+    // Failures are logged without invoking the callback. Destroying the client
+    // cancels pending delivery. The localSdpCreated signal is also emitted.
+    void createOffer(SdpCompletionHandler onSuccess = {});
+    void createAnswer(SdpCompletionHandler onSuccess = {});
+    // Returns whether setting the SDP was started; onSuccess runs on this
+    // object's Qt thread only after WebRTC has applied the remote description.
+    bool setRemoteSdp(const QString &type, const QString &sdp,
+                      std::function<void()> onSuccess = {});
+
+    bool setRemoteCandidate(const std::string &sdp,
+                            const std::string &sdpMid,
+                            const int sdpMLineIndex);
 
     // Delivers a captured frame to the local WebRTC video track. This may be
     // called from a capture thread after createPeerConnection() succeeds.
     bool pushVideoFrame(const webrtc::VideoFrame &frame);
 
+    // Configures voice processing for subsequently created local audio tracks.
+    // Called automatically by initialize(), on this object's thread.
+    void configureAudioSession();
+
+    void setEnableSpeaker(bool speaker);
+    void setMuteMicrophone(bool mute);
+
+    // Enable video before SDP negotiation; capture starts when connected.
+    void createLocalCameraTrack();
+    void setCameraEnabled(bool enable);
+
+    // Signales for tracks.
+
+// helper function
+public:
+
+    std::unique_ptr<webrtc::IceCandidateInterface> parseIceCandidate(
+        const std::string &sdp,
+        const std::string &sdpMid,
+        int sdpMLineIndex);
+
+
+
 signals:
+    void cameraEnabledChanged(bool enable);
+    void microphoneMuteChanged(bool enable);
+
+signals:
+    void errorOccurred(const QString &message);
+
     void localSdpCreated(
         const QString &type,
         const QString &sdp);
@@ -52,17 +107,19 @@ signals:
         int mlineIndex,
         const QString &candidate);
 
-    void remoteVideoFrameReady();
+    void localVideoFrameReady(const QImage &image);
+    void remoteVideoFrameReady(const QImage &image);
     void connected();
     void disconnected();
+    void localIceCandidateGenerated(const QString &candidate, const QString &sdpMid, int sdpMLineIndex);
+    void connectionStateChanged(core::rtc::ConnectionState state);
+
+private:
+    void createLocalAudioTrack();
+    void updateCameraCapture();
 
 private:
     std::unique_ptr<WebRtcClientPrivate> d;
-    webrtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> m_factory;
-    webrtc::scoped_refptr<webrtc::PeerConnectionInterface> m_peerConnection;
-
-    std::unique_ptr<core::rtc::PeerConnectionObserver> m_peerObserver;
-    webrtc::scoped_refptr<core::rtc::SdpObserver> m_sdpObserver;
 
 };
 

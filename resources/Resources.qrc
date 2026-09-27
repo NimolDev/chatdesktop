@@ -70,5 +70,26 @@
         <file>icons/xmark@2x.png</file>
         <file>icons/xmark@3x.png</file>
         <file>images/vp_start_blink.gif</file>
+        <file>icons/pin.png</file>
+        <file>icons/pin.slash.png</file>
+        <file>icons/pin.slash@2x.png</file>
+        <file>icons/pin.slash@3x.png</file>
+        <file>icons/pin@2x.png</file>
+        <file>icons/pin@3x.png</file>
+        <file>icons/pin.fill.png</file>
+        <file>icons/pin.fill@2x.png</file>
+        <file>icons/pin.fill@3x.png</file>
+        <file>icons/microphone.slash.png</file>
+        <file>icons/microphone.slash@2x.png</file>
+        <file>icons/microphone.slash@3x.png</file>
+        <file>icons/phone.down.png</file>
+        <file>icons/phone.down@2x.png</file>
+        <file>icons/phone.down@3x.png</file>
+        <file>icons/speaker.png</file>
+        <file>icons/speaker.slash.png</file>
+        <file>icons/speaker.slash@2x.png</file>
+        <file>icons/speaker.slash@3x.png</file>
+        <file>icons/speaker@2x.png</file>
+        <file>icons/speaker@3x.png</file>
     </qresource>
 </RCC>

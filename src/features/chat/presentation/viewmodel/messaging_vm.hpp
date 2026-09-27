@@ -40,6 +40,7 @@ public:
     Q_INVOKABLE void resetModel();
     Q_INVOKABLE void sendMessage(const QString &receiver_id, const QString &msg);
     Q_INVOKABLE void deleteMessage(QList<int> rows);
+    Q_INVOKABLE void requestCall(const QString &receiverId, const QString &userName);
 
 
 public:
@@ -51,6 +52,7 @@ public:
 
 
 signals:
+    void callRequested(const QString &receiverId, const QString &userName);
     void isLoadingChanged();
     void messageChanged();
     void initialMessagesLoaded();

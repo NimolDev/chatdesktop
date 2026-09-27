@@ -1,7 +1,6 @@
 #include "macos_menu_bar.hpp"
 
-#include <QApplication>
-#include <QWindow>
+
 
 #import <AppKit/AppKit.h>
 
@@ -34,7 +33,7 @@
 - (void)quitApp:(id)sender
 {
     Q_UNUSED(sender);
-    self.app->quit();
+    // self.app->quit();
 }
 
 @end

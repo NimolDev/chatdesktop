@@ -2,11 +2,12 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
-// import QtQuick.Window
+import QtQuick.Window
 
 import Localization
 import Theme
 import Features.Auth
+import Features.Chat
 import ChatApp
 
 import "component" as AppComponent
@@ -14,11 +15,11 @@ import "component" as AppComponent
 
 ApplicationWindow {
     id: window
-    width: 1080
-    height: 720
-    minimumWidth: 1080
-    minimumHeight: 720
-    visible: false
+    width: AppLayouts.width
+    height: AppLayouts.height
+    minimumWidth: AppLayouts.minWidth
+    minimumHeight: AppLayouts.minHeight
+    visible: true
     title: AppController.userName
 
     Component.onCompleted: {
@@ -36,7 +37,7 @@ ApplicationWindow {
             var state = AppController.state
             switch(AppController.state ) {
             case AppController.Unauthenticated:
-                pageLoader.sourceComponent = loginPage
+                 pageLoader.sourceComponent = loginPage
                 break
             case AppController.Logout:
                  pageLoader.sourceComponent = loginPage
@@ -51,22 +52,10 @@ ApplicationWindow {
     Connections {
         target: LoginVM
         function onLoginSucceeded() {
-
-            // pageLoader.sourceComponent = mainWindow
-
+            pageLoader.sourceComponent = mainWindow
             window.title = LoginVM.userName
         }
     }
-
-    // PetWindow {
-    //     id: desktopPet
-
-    //     visible: false
-
-    //     x: 0
-    //     y: 0
-    // }
-
 
 
     AboutDialog {
@@ -119,6 +108,5 @@ ApplicationWindow {
             }
         }
     }
-
 
 }

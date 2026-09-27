@@ -1,6 +1,8 @@
 add_library(xmpp STATIC
-    xmpp_manager.hpp xmpp_manager.cpp
-    xmpp_service_discovery.cpp xmpp_service_discovery.hpp
+    xmpp_manager.hpp
+    xmpp_manager.cpp
+    xmpp_service_discovery.cpp
+    xmpp_service_discovery.hpp
 )
 add_library(core::xmpp ALIAS xmpp)
 

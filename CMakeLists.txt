@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake")
-
+set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture" FORCE)
 project(Chat_Desktop VERSION ${APP_VERSION} LANGUAGES CXX)
+
+if(MSVC)
+    # Match the static CRT used by the bundled WebRTC archive in release builds.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -41,6 +46,7 @@ set(CMAKE_AUTOMOC ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Quick

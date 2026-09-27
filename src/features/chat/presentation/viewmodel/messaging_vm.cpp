@@ -1,10 +1,16 @@
 #include "messaging_vm.hpp"
+#include "utils/date_time_utils.hpp"
 
 #include <algorithm>
 
-#include "utils/date_time_utils.hpp"
-
 MessagingViewModel *MessagingViewModel::s_instance = nullptr;
+
+void MessagingViewModel::requestCall(const QString &receiverId, const QString &userName)
+{
+    if (!receiverId.trimmed().isEmpty()) {
+        emit callRequested(m_activeConversationId, userName);
+    }
+}
 
 MessagingViewModel::MessagingViewModel(
     std::shared_ptr<domain::usecase::MessageUsecase> usecase,

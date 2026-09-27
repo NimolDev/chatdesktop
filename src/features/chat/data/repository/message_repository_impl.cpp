@@ -117,6 +117,7 @@ void MessageRepositoryImpl::saveMessage(QString receiver_id, QString body)
 void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message)
 {
     // qDebug() << "Message receive:"<<message.from;
+
     data::dto::PayloadDto dto = data::dto::PayloadDto::fromJsonString (message.body).value ();
     dto::MessageItemDto msgDto;
     msgDto.id = dto.message_id;

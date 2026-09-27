@@ -23,6 +23,7 @@ Page {
     property int selectedIndex:  -1
     signal logoutClicked()
 
+
     background: Rectangle {
         color: Colors.background
     }
@@ -291,6 +292,5 @@ Page {
 
     }
 
-
-
 }
+

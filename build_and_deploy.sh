@@ -5,7 +5,7 @@
 # Configures, builds (Release), and deploys a Qt/CMake macOS app in one go:
 #   1. cmake configure (Release)
 #   2. cmake build
-#   3. macdeployqt (bundles Qt frameworks, scans QML imports)
+#   3. cmake install (deploys QML plugins and runs macdeployqt)
 #   4. optional: strip unused frameworks (calls cleanup_qt_frameworks.sh if present)
 #   5. optional: ad-hoc codesign + dmg
 #
@@ -23,12 +23,12 @@ set -euo pipefail
 # CONFIG — edit these for your project
 # ------------------------------------------------------------------
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # assumes script lives at repo root; change if not
-BUILD_DIR="$PROJECT_ROOT/build"
+BUILD_DIR="${BUILD_DIR:-$PROJECT_ROOT/build}"
+DEPLOY_DIR="${DEPLOY_DIR:-$BUILD_DIR/deploy}"
 QT_PREFIX="${QT_PREFIX:-$HOME/Qt/6.11.1/macos}"                  # override: QT_PREFIX=/path/to/Qt ./build_and_deploy.sh
 APP_NAME="src/app/ChatApp"                                              # <-- change to your .app target name (without .app)
-QML_SOURCE_DIR="$PROJECT_ROOT"                                  # dir macdeployqt scans for QML imports
 QUICK_CONTROLS_STYLE="${QUICK_CONTROLS_STYLE:-Basic}"           # only bundle this Quick Controls style
-BUILD_ARCHS="${BUILD_ARCHS:-}"                                  # e.g. "arm64;x86_64" for universal; empty = native only
+BUILD_ARCHS="${BUILD_ARCHS:-}"                                  # arm64 or x86_64; empty = CMake default
 
 # ------------------------------------------------------------------
 # ARGS
@@ -43,7 +43,8 @@ for arg in "$@"; do
     esac
 done
 
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
+BUILD_BUNDLE="$BUILD_DIR/$APP_NAME.app"
+APP_BUNDLE="$DEPLOY_DIR/ChatApp.app"
 MACDEPLOYQT="$QT_PREFIX/bin/macdeployqt"
 
 # ------------------------------------------------------------------
@@ -82,8 +83,8 @@ cmake "${CMAKE_ARGS[@]}"
 echo "== Building (Release, $(sysctl -n hw.ncpu) jobs) =="
 cmake --build "$BUILD_DIR" --config Release -j"$(sysctl -n hw.ncpu)"
 
-if [[ ! -d "$APP_BUNDLE" ]]; then
-    echo "ERROR: expected app bundle not found at $APP_BUNDLE"
+if [[ ! -d "$BUILD_BUNDLE" ]]; then
+    echo "ERROR: expected app bundle not found at $BUILD_BUNDLE"
     echo "Check APP_NAME in this script matches your CMake target output name."
     exit 1
 fi
@@ -91,14 +92,37 @@ fi
 # ------------------------------------------------------------------
 # 3. DEPLOY (bundle Qt frameworks + QML modules)
 # ------------------------------------------------------------------
-echo "== Running macdeployqt (style=$QUICK_CONTROLS_STYLE) =="
+echo "== Installing portable bundle (style=$QUICK_CONTROLS_STYLE) =="
 export QT_QUICK_CONTROLS_STYLE="$QUICK_CONTROLS_STYLE"
 
-DEPLOY_ARGS=("$APP_BUNDLE" -qmldir="$QML_SOURCE_DIR")
-if [[ "$DO_DMG" == true ]]; then
-    DEPLOY_ARGS+=(-dmg)
+# MACOS_BUNDLE_POST_BUILD creates links to the developer's Qt installation.
+# The install deployment replaces those with links to bundled QML plugins,
+# then runs macdeployqt on the installed app, including those plugins.
+cmake --install "$BUILD_DIR" --config Release --prefix "$DEPLOY_DIR"
+
+# This app uses QSQLITE only. Other Qt SQL plugins can depend on database
+# clients installed on the build machine and are not needed in this bundle.
+for driver in "$APP_BUNDLE/Contents/PlugIns/sqldrivers/"*.dylib; do
+    if [[ -f "$driver" && "${driver##*/}" != libqsqlite.dylib ]]; then
+        rm "$driver"
+    fi
+done
+
+# Location uses macOS CoreLocation, not an external serial GPS receiver.
+# Qt's optional NMEA plugin requires QtSerialPort, absent from this Qt kit.
+NMEA_PLUGIN="$APP_BUNDLE/Contents/PlugIns/position/libqtposition_nmea.dylib"
+if [[ -f "$NMEA_PLUGIN" ]]; then
+    rm "$NMEA_PLUGIN"
 fi
-"$MACDEPLOYQT" "${DEPLOY_ARGS[@]}"
+
+while IFS= read -r -d '' link; do
+    if [[ ! -e "$link" || "$(readlink "$link")" == /* ]]; then
+        echo "ERROR: non-portable bundle symlink: $link -> $(readlink "$link")"
+        exit 1
+    fi
+done < <(find "$APP_BUNDLE" -type l -print0)
+
+python3 "$PROJECT_ROOT/tools/verify_macos_bundle.py" "$APP_BUNDLE"
 
 # ------------------------------------------------------------------
 # 4. OPTIONAL CLEANUP (unused frameworks) — runs only if the script exists
@@ -120,12 +144,18 @@ fi
 echo "== Ad-hoc codesigning =="
 codesign --force --deep --sign - "$APP_BUNDLE"
 
+if [[ "$DO_DMG" == true ]]; then
+    # Package only after the final bundle has been signed.
+    DMG_PATH="$DEPLOY_DIR/ChatApp.dmg"
+    hdiutil create -volname ChatApp -srcfolder "$APP_BUNDLE" \
+        -ov -format UDZO "$DMG_PATH"
+fi
+
 echo
 echo "== Done =="
 echo "App bundle: $APP_BUNDLE"
 echo "Size: $(du -sh "$APP_BUNDLE" | cut -f1)"
 if [[ "$DO_DMG" == true ]]; then
-    DMG_PATH="$BUILD_DIR/$APP_NAME.dmg"
     if [[ -f "$DMG_PATH" ]]; then
         echo "DMG: $DMG_PATH ($(du -sh "$DMG_PATH" | cut -f1))"
     else

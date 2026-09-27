@@ -28,6 +28,8 @@ void XmppServiceDiscovery::requestExtDiscoQuery(const QString &server)
                 const auto &services = std::get<QVector<QXmppExternalService>>(result);
 
                 for (const QXmppExternalService &service : services) {
+
+
                     qDebug() << "Type:" << service.type();
                     qDebug() << "Host:" << service.host();
                     qDebug() << "Port:" << service.port();

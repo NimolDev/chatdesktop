@@ -12,8 +12,6 @@
 #include <QDir>
 #include <QLockFile>
 #include <QStandardPaths>
-#include <QQuickWindow>
-#include <memory>
 
 #include "application/app_info.hpp"
 #include "localization/language_manager.hpp"
@@ -21,10 +19,9 @@
 
 #include "storage/database_manager.hpp"
 #include "app_container.hpp"
+#include "call_coordinator.hpp"
 
 #include "logging/logger.hpp"
-
-#include "voip/presentation/viewmodel/call_vm.hpp"
 
 #ifdef Q_OS_MACOS
 #include "platform/macos/macos_menu_bar.hpp"
@@ -95,6 +92,7 @@ void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
 }
 
 
+
 } // namespace
 
 
@@ -114,15 +112,16 @@ int main(int argc, char *argv[])
     // when an alert is clicked. Stop that second process before it constructs
     // another QML engine/window. Keep the lock alive for the entire main().
 
-    const QString instanceLockPath = QDir(
-        QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-        ).filePath(core::application::AppInfo::bundleIdentifier()
-                   + QStringLiteral(".lock"));
-    QLockFile instanceLock(instanceLockPath);
-    if (!instanceLock.tryLock()) {
-        qInfo() << "ChatApp is already running; refusing duplicate launch";
-        return EXIT_SUCCESS;
-    }
+    // const QString instanceLockPath = QDir(
+    //     QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+    //     ).filePath(core::application::AppInfo::bundleIdentifier()
+    //                + QStringLiteral(".lock"));
+    // QLockFile instanceLock(instanceLockPath);
+    // if (!instanceLock.tryLock()) {
+    //     qInfo() << "ChatApp is already running; refusing duplicate launch";
+    //     return EXIT_SUCCESS;
+    // }
+
     app.setQuitOnLastWindowClosed (false);
 
     // Container-owned QML singletons must outlive the QML engine. Local
@@ -131,6 +130,8 @@ int main(int argc, char *argv[])
     AppContainer app_container;
     QQmlApplicationEngine engine;
     appEngineRegister (app, engine);
+    // Destroy the coordinator and its windows before the QML engine.
+    CallCoordinator callCoordinator(app_container, engine);
 
     // set app to dark mode only
     QStyleHints *styleHints = QGuiApplication::styleHints();
@@ -160,6 +161,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+
+
 #ifdef Q_OS_MACOS
 
     platform::macos::Notification::instance ().requestPermission ();
@@ -168,61 +171,38 @@ int main(int argc, char *argv[])
     MacosTrayIcon trayIcon(&app, window);
     trayIcon.setBadgeNumber (99);
 
-    // Defer until QML has created the native backing window. Reapplying when
-    // visibility changes also covers Qt recreating it after a hide/show cycle.
-    // if (auto *petWindow = engine.rootObjects().constFirst()->findChild<QWindow *>(
-    //         QStringLiteral("desktopPetWindow"))) {
-    //     const auto configurePet = [petWindow]() {
-    //         platform::macos::configurePetWindow(petWindow);
-    //     };
-    //     QObject::connect(petWindow, &QWindow::visibleChanged, &app,
-    //                      [configurePet](bool visible) {
-    //                          if (visible) {
-    //                              QTimer::singleShot(0, configurePet);
-    //                          }
-    //                      });
-    //     QTimer::singleShot(0, configurePet);
-    // } else {
-    //     qWarning() << "Desktop pet window was not found";
-    // }
+
+
 
 #else
 
-    app.setBadgeNumber(10);
-    // Keep both objects alive for the whole application lifetime. Local
-    // instances would be destroyed when setupTrayIcon() returns.
-    static auto trayIcon = std::make_unique<QSystemTrayIcon>();
-    static auto trayMenu = std::make_unique<QMenu>();
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
-        trayIcon.reset();
-        trayMenu.reset();
-    });
-    trayIcon->setIcon(QIcon(":/images/1024.png"));
-    trayIcon->setToolTip("ChatApp");
+    QSystemTrayIcon trayIcon;
+    trayIcon.setIcon(QIcon(":/images/1024.png"));
+    trayIcon.setToolTip("ChatApp");
 
-    QAction *openAction = trayMenu->addAction("Open ChatApp");
-    QAction *notificationAction = trayMenu->addAction("Disable Notification");
-    trayMenu->addSeparator();
-    QAction *quitAction = trayMenu->addAction("Quit ChatApp");
+    QMenu trayMenu;
+    QAction *openAction = trayMenu.addAction("Open ChatApp");
+    QAction *notificationAction = trayMenu.addAction("Disable Notification");
+    trayMenu.addSeparator();
+    QAction *quitAction = trayMenu.addAction("Quit ChatApp");
 
-    trayIcon->show();
+    trayIcon.show();
 
-    const auto restoreWindow = [&window]() {
+    const auto restoreWindow = [window]() {
         window->show();
         window->raise();
         window->requestActivate();
     };
 
     QObject::connect(
-        trayIcon.get(),
+        &trayIcon,
         &QSystemTrayIcon::activated,
-        [restoreWindow, menu = trayMenu.get(), icon = trayIcon.get()]
-        (QSystemTrayIcon::ActivationReason reason) {
+        [restoreWindow, &trayMenu, &trayIcon](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger) {
                 restoreWindow();
             } else if (reason == QSystemTrayIcon::Context) {
-                const QRect trayGeometry = icon->geometry();
-                const QSize menuSize = menu->sizeHint();
+                const QRect trayGeometry = trayIcon.geometry();
+                const QSize menuSize = trayMenu.sizeHint();
                 QScreen *screen = QGuiApplication::screenAt(trayGeometry.center());
 
                 if (!screen) {
@@ -243,7 +223,7 @@ int main(int argc, char *argv[])
                                   ? trayGeometry.bottom() + 1
                                   : trayGeometry.top() - menuSize.height();
 
-                menu->popup(QPoint(x, y));
+                trayMenu.popup(QPoint(x, y));
             }
         }
         );
@@ -278,7 +258,7 @@ int main(int argc, char *argv[])
         }
         );
 
-    // auto vm = new CallVM();
+    // auto vm =  new CallVM();
     const int result = app.exec ();
     core::logging::Logger::shutdown ();
     return result;

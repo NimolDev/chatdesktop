@@ -4,6 +4,7 @@
 
 #include "xmpp_service_discovery.hpp"
 
+
 #include <QObject>
 #include <QString>
 #include <QXmppPresence.h>
@@ -12,6 +13,7 @@
 #include <QXmppRosterManager.h>
 
 #include <optional>
+#include <memory>
 
 namespace core {
 namespace xmpp {
@@ -91,8 +93,11 @@ public slots:
     void sendMessage(
         const QString &receiver_id,
         const QString &message);
+    void requestExternalService();
 
 signals:
+    // Emitted on the XMPP thread; feature services attach before connecting.
+    void clientInitialized(QXmppClient *client);
     void connectionStateChanged();
     void connectionFailed();
     void connectedChanged();
@@ -100,6 +105,7 @@ signals:
 
     void messageReceived(const core::xmpp::Message &message);
     void presenceReceived(const core::xmpp::Presence &presence);
+    void externalServiceReceived(const QVector<QXmppExternalService> &sevices);
 
 private slots:
     void onMessageReceived(const QXmppMessage &message);
@@ -131,6 +137,7 @@ private:
     bool m_connectionStartScheduled = false;
 
     std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
+
 
 };
 

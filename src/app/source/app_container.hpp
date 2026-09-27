@@ -8,6 +8,10 @@
 #include "xmpp/xmpp_manager.hpp"
 #include "chat/presentation/viewmodel/home_chat_vm.hpp"
 
+namespace voip {
+namespace signaling { class JingleService; }
+}
+
 class AppContainer
 {
 
@@ -27,11 +31,14 @@ private:
     void registerAppController();
     void registerAuthentication();
     void registerChat();
+    void registerVoip();
 
     ServiceContainer m_container;
 
     QThread *m_xmppThread = nullptr;
     std::shared_ptr<core::xmpp::XmppManager> m_xmpp;
+    voip::signaling::JingleService *m_jingleService = nullptr;
 };
 
 #endif // APP_APP_CONTAINER_HPP
+

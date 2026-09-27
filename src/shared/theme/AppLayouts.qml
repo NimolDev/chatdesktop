@@ -19,7 +19,7 @@ QtObject {
     readonly property int xxl_padding: 24
     readonly property int xxxl_padding: 32
 
-    // App Corner Raius
+    // App Corner Radius
     readonly property int s_radius: 4
     readonly property int m_radius: 6
     readonly property int l_radius: 8
