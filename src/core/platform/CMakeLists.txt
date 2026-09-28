@@ -64,7 +64,7 @@ elseif(WIN32)
             win/win_tray.cpp
     )
 
-    target_link_libraries(platform PRIVATE dwmapi)
+    target_link_libraries(platform PRIVATE dwmapi user32 uxtheme)
 
 endif()
 

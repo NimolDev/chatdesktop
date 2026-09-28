@@ -46,7 +46,6 @@ qt_add_qml_module(ChatApp
         source/app_controller.cpp
         QML_FILES qml/PetWindow.qml
 
-
     # RESOURCES Info.plist
 )
 

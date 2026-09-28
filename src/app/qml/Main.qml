@@ -91,13 +91,6 @@ ApplicationWindow {
             }
         }
     }
-
-    Loader {
-        id: pageLoader
-        anchors.fill: parent
-        // color: Colors.background
-        sourceComponent: background
-    }
     Component {
         id: background
         Rectangle {

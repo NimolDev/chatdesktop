@@ -111,7 +111,8 @@ void XmppManager::connectToServer(
     const ConnectionParameters parameters {
         .jid = normalized_jid,
         .password = password,
-        .host = host.trimmed(),
+        // .host = host.trimmed(),
+        .host = "172.16.30.44",
         .port = port
     };
 

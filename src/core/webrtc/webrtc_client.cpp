@@ -600,6 +600,99 @@ void WebrtcClient::closeConnection()
 }
 
 // MARK: -- Audio session ---
+void WebrtcClient::setAudioInputDevice(const QAudioDevice &device)
+{
+    d->audioInput = device;
+    applyAudioDevice(device, true);
+}
+
+void WebrtcClient::setAudioOutputDevice(const QAudioDevice &device)
+{
+    d->audioOutput = device;
+    applyAudioDevice(device, false);
+}
+
+void WebrtcClient::setCameraDevice(const QCameraDevice &device)
+{
+    d->cameraDevice = device;
+    if (d->capture) {
+        QMetaObject::invokeMethod(d->capture, [capture = d->capture, device] {
+            capture->setDevice(device);
+        }, Qt::QueuedConnection);
+    }
+}
+
+void WebrtcClient::applyAudioDevice(const QAudioDevice &device, bool input)
+{
+    if (!d->m_audioDevice || !d->workerThread) {
+        return;
+    }
+
+    QString error;
+    d->workerThread->BlockingCall([this, device, input, &error] {
+        auto *adm = d->m_audioDevice.get();
+        bool &resume = input ? d->resumeRecording : d->resumePlayout;
+        resume = resume || (input ? adm->Recording() : adm->Playing());
+
+        // Device selection requires stopping the corresponding audio stream.
+        if ((input ? adm->StopRecording() : adm->StopPlayout()) != 0) {
+            error = QStringLiteral("Cannot stop audio for device selection");
+            return;
+        }
+        // Remember active capture/playout while a device is unplugged.
+        if (device.isNull()) {
+            return;
+        }
+
+        const int count = input ? adm->RecordingDevices() : adm->PlayoutDevices();
+        int selected = -1;
+        int nameMatch = -1;
+        for (int index = 0; index < count; ++index) {
+            char name[webrtc::kAdmMaxDeviceNameSize] = {};
+            char guid[webrtc::kAdmMaxGuidSize] = {};
+            const int result = input
+                ? adm->RecordingDeviceName(index, name, guid)
+                : adm->PlayoutDeviceName(index, name, guid);
+            if (result != 0) {
+                continue;
+            }
+            if (device.id() == QByteArray(guid)) {
+                selected = index;
+                break;
+            }
+            if (nameMatch < 0 && device.description() == QString::fromUtf8(name)) {
+                nameMatch = index;
+            }
+        }
+        if (selected < 0) {
+            selected = nameMatch;
+        }
+        if (selected < 0) {
+            error = QStringLiteral("WebRTC cannot find audio device: %1")
+                        .arg(device.description());
+            return;
+        }
+        const auto index = static_cast<uint16_t>(selected);
+        if ((input ? adm->SetRecordingDevice(index) : adm->SetPlayoutDevice(index)) != 0) {
+            error = QStringLiteral("Cannot select audio device: %1").arg(device.description());
+            return;
+        }
+        if (resume) {
+            const int initialized = input ? adm->InitRecording() : adm->InitPlayout();
+            if (initialized != 0
+                || (input ? adm->StartRecording() : adm->StartPlayout()) != 0) {
+                error = QStringLiteral("Cannot restart audio device: %1").arg(device.description());
+                return;
+            }
+            resume = false;
+        }
+    });
+    if (!error.isEmpty()) {
+        LOG_WARNING(error);
+        emit errorOccurred(error);
+    }
+}
+
 void WebrtcClient::setEnableSpeaker(bool speaker)
 {
 

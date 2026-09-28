@@ -140,6 +140,7 @@ void CallCoordinator::showCallWindow(const QString &receiverId, const QString &u
     m_callWindow->setProperty("incomingCall", incoming);
     m_callWindow->setProperty("incomingVideo", video);
 
+    m_window.setup(m_callWindow);
     m_window.setWindowFillContent ();
     m_callWindow->showNormal();
     updateCallWindowPin();

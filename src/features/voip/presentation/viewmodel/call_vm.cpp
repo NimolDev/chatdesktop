@@ -310,8 +310,6 @@ CallVM::CallState CallVM::callState() const
 {
     return m_currentCallState;
 }
-<<<<<<< HEAD
-=======
 
 void CallVM::setCallState(const CallState &state)
 {
@@ -366,4 +364,3 @@ void CallVM::selectCamera(int index)
 {
     m_mediaDevices.selectCamera(index);
 }
->>>>>>> 787530cf9bdca26384d1218f903aea7c014008d4

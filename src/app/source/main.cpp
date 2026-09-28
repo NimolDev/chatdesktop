@@ -218,8 +218,10 @@ int main(int argc, char *argv[])
     tray.setQuitCallback ([&app] {
         app.quit ();
     });
-    core::platform::PlatformMenu appMenu;
-    appMenu.setup();
+
+    // core::platform::PlatformMenu appMenu;
+    // appMenu.setup();
+
 
     core::platform::PlaformNotification notifcation;
     notifcation.requestPermission ();
