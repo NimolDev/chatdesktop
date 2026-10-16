@@ -23,6 +23,7 @@
 #include "chat/presentation/viewmodel/conversations_vm.hpp"
 #include "chat/domain/repository/message_repository.hpp"
 #include "chat/data/repository/message_repository_impl.hpp"
+#include "chat/data/repository/media_repository_impl.hpp"
 #include "chat/domain/usecase/message_usecase.hpp"
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
 #include "chat/presentation/viewmodel/home_chat_vm.hpp"
@@ -117,10 +118,13 @@ void AppContainer::registerCoreService()
             return std::make_shared<core::network::logging::LoggingInterceptor> ();
         });
 
+
+
     m_container.registerFactory<core::network::NetworkClient> ([](ServiceContainer &c) {
-        auto client = std::make_shared<core::network::NetworkClient> (core::constants::AppConstants::baseUrl ());
+        auto client = std::make_shared<core::network::NetworkClient>
+            (core::constants::AppConstants::baseUrl ());
         client->addInterceptor (c.resolve<core::network::logging::AuthInterceptor> ());
-        client->addInterceptor (c.resolve<core::network::logging::LoggingInterceptor> ());
+        client->addInterceptor (c.resolve<core::network::logging::LoggingInterceptor> ()); 
         return client;
     });
     m_container.registerSingleton<core::xmpp::XmppManager> ([this](ServiceContainer &) {
@@ -176,6 +180,9 @@ void AppContainer::registerAuthentication()
 
 void AppContainer::registerChat()
 {
+    m_container.registerSingleton<domain::repository::MediaRepository>([](ServiceContainer &) {
+        return std::make_shared<data::repository::MediaRepositoryImpl>();
+    });
     m_container.registerSingleton<domain::repository::MessageRepository> ([](ServiceContainer &c) {
         return std::make_shared<data::repository::MessageRepositoryImpl> (
             c.resolve<core::xmpp::XmppManager> (),
@@ -191,7 +198,9 @@ void AppContainer::registerChat()
     m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
         return std::make_shared<MessagingViewModel> (
             c.resolve<domain::usecase::MessageUsecase> (),
-            c.resolve<domain::usecase::SendMessageUsecase> ()
+            c.resolve<domain::usecase::SendMessageUsecase> (),
+            nullptr,
+            c.resolve<domain::repository::MediaRepository>()
             );
     });
     MessagingViewModel::setInstance (m_container.resolve<MessagingViewModel> ().get ());

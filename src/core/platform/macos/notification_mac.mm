@@ -19,9 +19,6 @@
     Q_UNUSED(center);
     Q_UNUSED(notification);
 
-    // Do not present a system banner over ChatApp itself. Besides being
-    // redundant, clicking a foreground banner causes macOS to send the app a
-    // reopen request. The app should update its current conversation in-app.
     if (NSApp.isActive) {
         completionHandler(UNNotificationPresentationOptionNone);
         return;
@@ -186,8 +183,8 @@ void NotificationMac::requestPermission()
 }
 
 
-
-
 } // namespace macos
 } // namespace platform
 } // namespace core
+
+

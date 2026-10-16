@@ -2,6 +2,17 @@
 
 
 #include <QTimer>
+#include <QPromise>
+#include <QFileInfo>
+#include <QMimeDatabase>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QHostAddress>
+#include <QXmppUploadRequestManager.h>
+#include <QXmppHttpUploadIq.h>
+#include <QXmppDiscoveryManager.h>
+#include <QXmppTask.h>
+#include <QXmppSendResult.h>
 #include <QThread>
 #include <QUuid>
 
@@ -69,6 +80,7 @@ void XmppManager::requestExternalService()
     }
     m_discovery->requestExtDiscoQuery (QStringLiteral ("localhost"));
 }
+
 
 void XmppManager::connectToServer(
     const QString &jid,
@@ -182,40 +194,20 @@ void XmppManager::closeConnection()
     m_client->disconnectFromServer();
 }
 
-void XmppManager::sendMessage(const QString &receiver_id, const QString &message)
-{
-    if (QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(
-            this,
-            [this, receiver_id, message]() { sendMessage(receiver_id, message); },
-            Qt::QueuedConnection);
-        return;
-    }
-
-    Q_ASSERT(m_client);
-    if (m_client->state () != QXmppClient::ConnectedState) {
-        qWarning() << "XMPP Client is not connected";
-        return;
-    }
-    const QString body = message.trimmed ();
-
-    if (receiver_id.isEmpty () || body.isEmpty ()) {
-        return;
-    }
-    const QString receiver_jid = receiver_id + "@localhost";
-    QXmppMessage msg;
-    msg.setTo (receiver_jid);
-    msg.setBody (body);
-    msg.setType (QXmppMessage::Chat);
-    msg.setId (QUuid::createUuid ().toString (QUuid::WithoutBraces));
-    // QXmppStanza stanza;
-
-    m_client->send (std::move (msg));
-
-}
 
 void XmppManager::initializeHandlers()
 {
+    if (!m_client->findExtension<QXmppDiscoveryManager>()) {
+        m_client->addExtension(new QXmppDiscoveryManager);
+    }
+    if (!m_client->findExtension<QXmppUploadRequestManager>()) {
+        m_client->addExtension(new QXmppUploadRequestManager);
+    }
+    auto *network = new QNetworkAccessManager(m_client);
+    network->setTransferTimeout(60000);
+    m_httpUpload = new QXmppHttpUploadManager(network);
+    m_client->addExtension(m_httpUpload);
+
     m_roster = m_client->QXmppClient::findExtension<QXmppRosterManager>();
     if (!m_roster) {
         qWarning() << "QXmppRosterManager not available";
@@ -364,8 +356,6 @@ void XmppManager::initializeSignals()
     // logger->setMessageTypes(QXmppLogger::AnyMessage);
 }
 
-
-
 void XmppManager::onMessageReceived(const QXmppMessage &message)
 {
     const Message msg = Message::map (message);
@@ -408,7 +398,6 @@ void XmppManager::onIQReceived(const QXmppIq &iq)
     // }
 }
 
-
 QString XmppManager::lastError() const
 {
     if (QThread::currentThread() == thread()) {
@@ -437,8 +426,6 @@ QString XmppManager::currentJid() const
     return jid;
 }
 
-
-
 void XmppManager::updateState(ConnectionState state)
 {
     if (m_connectionState == state) {
@@ -457,6 +444,193 @@ void XmppManager::setLastError(const QString &error)
     m_lastError = error;
     emit lastErrorChanged ();
 }
+
+QFuture<QString> XmppManager::sendMessage(const QString &receiver_id, const QString &message, const QString &message_id)
+{
+    auto promise = std::make_shared<QPromise<QString>>();
+    promise->start();
+    auto future = promise->future();
+    QMetaObject::invokeMethod (this,
+                              [this, receiver_id, message,message_id, promise] {
+                                  if (!m_client || !m_client->isConnected ()
+                                      || receiver_id.isEmpty () || message.isEmpty ()) {
+                                      promise->addResult (tr("The message could not be sent. Reconnect and retry"));
+                                      promise->finish ();
+                                      return;
+                                  }
+                                  const QString body = message.trimmed ();
+                                  const QString domain = m_client->configuration().jid().section('@', 1).section('/', 0, 0);
+                                  const QString receiver_jid = receiver_id + "@" + domain;
+                                  QXmppMessage msg;
+                                  msg.setTo (receiver_jid);
+                                  msg.setBody (body);
+                                  msg.setType (QXmppMessage::Chat);
+                                  msg.setId (message_id);
+                                  m_client->send (std::move (msg))
+                                      .then (this,
+                                            [promise](QXmpp::SendResult result) {
+                                                const auto *error = std::get_if<QXmppError> (&result);
+                                                promise->addResult (error ? error->description : QString());
+                                                promise->finish ();
+                                            });
+                              }, Qt::AutoConnection);
+
+    return future;
+}
+
+
+QFuture<QList<UploadedFile>> XmppManager::fileUploads(const QString &id, const QStringList &file_paths)
+{
+    auto promise = std::make_shared<QPromise<QList<UploadedFile>>>();
+    promise->start();
+    auto future = promise->future();
+    QMetaObject::invokeMethod(this, [this,id, file_paths, promise] {
+        if (promise->isCanceled()) {
+            promise->finish();
+            return;
+        }
+        QList<QFuture<UploadedFile>> uploads;
+        uploads.reserve(file_paths.size());
+        for (const auto &path : file_paths) {
+            if (promise->isCanceled()) {
+                break;
+            }
+            uploads.append(fileUpload(id, path));
+        }
+        watchFileUploads(uploads, promise, this);
+    }, Qt::AutoConnection);
+    return future;
+}
+
+QFuture<UploadedFile> XmppManager::fileUpload(const QString &id,const QString &file_path)
+{
+    auto promise = std::make_shared<QPromise<UploadedFile>> ();
+    promise->start ();
+    auto future = promise->future ();
+    QMetaObject::invokeMethod (this, [this, file_path, promise, id] {
+        if (promise->isCanceled()) {
+            promise->finish();
+            return;
+        }
+        const auto reject = [promise](const QString &error) {
+            promise->addResult (UploadedFile{{}, error});
+            promise->finish ();
+        };
+        if (!m_client || !m_client->isConnected () || !m_httpUpload) {
+            reject (tr("Connect to XMPP before uploading a file."));
+            return;
+        }
+        const QUrl file = QUrl(file_path);
+        const QFileInfo info(file.toLocalFile ());
+        if (!file.isLocalFile () || !info.isFile () || info.size () <= 0) {
+            reject(tr("File missing or empty"));
+            return;
+        }
+        if (m_httpUpload->support () != QXmppHttpUploadManager::Support::Supported) {
+            reject(m_httpUpload->support () == QXmppHttpUploadManager::Support::Unknown
+                   ? tr("Upload service discovery is still running. Please retry.")
+                       : tr("Enable the HTTP File upload plugin"));
+            return;
+        }
+        auto *request = m_client->findExtension<QXmppUploadRequestManager>();
+        const auto services = m_httpUpload->services ();
+        if (!request || services.isEmpty ()) {
+            reject(tr("File upload service is not available"));
+            return;
+        }
+        auto *operation = new FileUploadOperation(promise, this);
+        if (!operation->open(info.absoluteFilePath())) {
+            return;
+        }
+        const auto complete = [operation](const UploadedFile &result) {
+            operation->finish(result);
+        };
+        connect(m_client, &QXmppClient::disconnected, operation, [complete] {
+            complete({{}, QObject::tr("Disconnected during file upload. Reconnect and retry.")});
+        });
+        /*
+         * Request the XMPP slot seperately: the application's HTTP transport
+         * Suppot local delvelopment server
+         */
+        const auto mimType = QMimeDatabase().mimeTypeForFile (info);
+        // const QString file_name = QUuid::createUuid ().toString (QUuid::WithoutBraces)
+        //                           + "." + info.suffix ();
+
+        const QString file_name = info.fileName ();
+        request->requestSlot (
+            file_name,
+            info.size (),
+            mimType,
+            services.first ().jid ()
+            ).then (operation,
+                  [this,id, operation, complete, mimType]
+                  (QXmppUploadRequestManager::SlotResult result) {
+                      if (operation->isStopped()) {
+                          return;
+                      }
+                      if (const auto *error = std::get_if<QXmppError> (&result)) {
+                          complete ({{}, error->description});
+                          return;
+                      }
+                      const auto &slot = std::get<QXmppHttpUploadSlotIq>(result);
+                      const auto allow_url = [](const QUrl &url) {
+                          if (!url.isValid () || url.host ().isEmpty () || !url.userInfo ().isEmpty ()) {
+                              return false;
+                          };
+                          if (url.scheme () == QStringLiteral ("https")) {
+                              return true;
+                          }
+                          return url.scheme () == QStringLiteral ("http")
+                                 && (url.host ().compare (QStringLiteral ("localhost"), Qt::CaseInsensitive) == 0
+                                     || QHostAddress(url.host ()).isLoopback ()) ;
+                      };
+                      if (!allow_url (slot.putUrl ()) || !allow_url (slot.getUrl ()))  {
+                          complete ({{}, QObject::tr ("Upload URLs must use HTTPS or HTTP on localhost.")});
+                          return;
+                      }
+                      QNetworkRequest request(slot.putUrl ());
+                      request.setHeader (QNetworkRequest::ContentTypeHeader, mimType.name ());
+                      // Use the server-issued URL directly; do not forward slot credentials on redirects.
+                      request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+                      const auto headers = slot.putHeaders();
+                      for (auto it = headers.cbegin(); it != headers.cend(); ++it) {
+                          request.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
+                      }
+                      operation->put(request, slot.getUrl(),
+                                     [this, id](qint64 bytesSent, qint64 bytesTotal) {
+                          if (bytesTotal <= 0) {
+                              return;
+                          }
+                          const double progress = double(bytesSent) / double(bytesTotal);
+                          emit uploadProgressChanged(id,progress );
+                      });
+                  });
+
+    }, Qt::AutoConnection);
+    return future;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

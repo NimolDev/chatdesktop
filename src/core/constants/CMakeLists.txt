@@ -66,7 +66,7 @@ add_dependencies(
 
 target_compile_features(constants
     PUBLIC
-        cxx_std_20
+        cxx_std_23
 )
 
 target_include_directories(constants

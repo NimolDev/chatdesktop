@@ -39,5 +39,13 @@ QtObject {
     readonly property url icSpeakderSlash: "qrc:/icons/speaker.slash.png"
     readonly property url icMicrophoneSlash: "qrc:/icons/microphone.slash.png"
     readonly property url icVideoSlash: "qrc:/icons/video.slash.png"
+    readonly property url icChevronUp: "qrc:/icons/chevron.up.png"
+    readonly property url icPlay: "qrc:/icons/play.fill.png"
+    readonly property url icPause: "qrc:/icons/pause.fill.png"
+    readonly property url icLock: "qrc:/icons/lock.png"
+    readonly property url icLockOpen: "qrc:/icons/lock.open.png"
+    readonly property url icTrash: "qrc:/icons/trash.png"
+    readonly property url icDocument: "qrc:/icons/document.fill.png"
+    readonly property url icArrowDown: "qrc:/icons/arrow.down.png"
 
 }

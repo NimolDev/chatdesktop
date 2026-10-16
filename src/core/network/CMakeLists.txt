@@ -13,6 +13,7 @@ add_library(network STATIC
     json_serializer.hpp
     auth_interceptor.hpp auth_interceptor.cpp
     network_client.hpp network_client.cpp
+    http_download_service.hpp http_download_service.cpp
 
 )
 add_library(core::network ALIAS network)

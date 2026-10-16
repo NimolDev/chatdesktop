@@ -55,6 +55,12 @@ Menu {
         text: "Photo or Video"
         isShowIcon: false
         onTriggered: {
+            attachmentDialog.title = "Select photo or video to send"
+            attachmentDialog.nameFilters = [
+                "Images (*.avif *.bmp *.gif *.heic *.heif *.jfif *.jpeg *.jpg *.jxl *.pbm *.pgm *.png *.ppm *.webp *.xbm *.xpm)",
+                "Videos (*.mp4 *.mov *.m4v)"
+            ]
+            attachmentDialog.selectedNameFilter.index = 0
             attachmentDialog.open()
         }
     }
@@ -62,6 +68,18 @@ Menu {
         text: "File"
         isShowIcon: false
         onTriggered: {
+            attachmentDialog.title = "Select file to send"
+            attachmentDialog.nameFilters = [
+                "All files (*)",
+                "Documents (*.pdf *.doc *.docx *.odt *.rtf *.txt *.md)",
+                "Spreadsheets (*.xls *.xlsx *.ods *.csv *.tsv)",
+                "Presentations (*.ppt *.pptx *.odp)",
+                "Archives (*.zip *.rar *.7z *.tar *.gz *.bz2 *.xz)",
+                "Audio (*.mp3 *.wav *.m4a *.aac *.ogg *.flac *.aiff)",
+                "Images (*.avif *.bmp *.gif *.heic *.heif *.jfif *.jpeg *.jpg *.jxl *.pbm *.pgm *.png *.ppm *.webp *.xbm *.xpm)",
+                "Videos (*.mp4 *.mov *.m4v)"
+            ]
+            attachmentDialog.selectedNameFilter.index = 0
             attachmentDialog.open()
         }
     }
@@ -69,9 +87,11 @@ Menu {
         text: "Location"
         isShowIcon: false
         onTriggered: {
-            // mapView.show()
-            // mapView.raise()
-            // mapView.requestActivate()
+            if (mapLoader.item) {
+                mapLoader.item.show()
+            } else {
+                mapLoader.active = true
+            }
         }
 
     }
@@ -91,11 +111,18 @@ Menu {
         }
     }
 
-
-
-            // MapView  {
-            //     id: mapView
-            // }
+    // Do not create a hidden Window while previewing the messaging Item:
+    // Qt Preview would reuse that frameless window as its preview host.
+    Loader {
+        id: mapLoader
+        active: false
+        sourceComponent: Component {
+            MapView {
+                objectName: "mapView"
+            }
+        }
+        onLoaded: item.show()
+    }
 
 
 }

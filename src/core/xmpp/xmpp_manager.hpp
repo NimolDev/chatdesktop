@@ -3,9 +3,15 @@
 
 
 #include "xmpp_service_discovery.hpp"
+#include "file_upload_operation.hpp"
 
 
 #include <QObject>
+#include <QFuture>
+#include <QList>
+#include <QStringList>
+#include <QUrl>
+#include <QXmppHttpUploadManager.h>
 #include <QString>
 #include <QXmppPresence.h>
 #include <QXmppClient.h>
@@ -77,6 +83,7 @@ public:
 
     QString currentJid() const;
 
+
     // void connectToServer(const QString &jid, const QString &password);
 
 
@@ -90,10 +97,18 @@ public slots:
         quint16 port
         );
     void closeConnection();
-    void sendMessage(
+    QFuture<QString> sendMessage(
         const QString &receiver_id,
-        const QString &message);
+        const QString &message,
+        const QString &message_id);
+    // Cancel this future to stop slot negotiation / HTTP transfer. A canceled
+    // future has no result; check isCanceled() before reading result().
+    QFuture<core::xmpp::UploadedFile> fileUpload(const QString &id, const QString &file_path);
+    // Starts uploads concurrently; results retain the order of filePaths.
+    // Cancel the batch future to abort all unfinished uploads.
+    QFuture<QList<core::xmpp::UploadedFile>> fileUploads(const QString &id, const QStringList &filePaths);
     void requestExternalService();
+
 
 signals:
     // Emitted on the XMPP thread; feature services attach before connecting.
@@ -106,6 +121,8 @@ signals:
     void messageReceived(const core::xmpp::Message &message);
     void presenceReceived(const core::xmpp::Presence &presence);
     void externalServiceReceived(const QVector<QXmppExternalService> &sevices);
+
+    void uploadProgressChanged(const QString &id, double progress);
 
 private slots:
     void onMessageReceived(const QXmppMessage &message);
@@ -129,6 +146,7 @@ private:
 private:
     QXmppClient *m_client = nullptr;
     QXmppRosterManager *m_roster = nullptr;
+    QXmppHttpUploadManager *m_httpUpload = nullptr;
 
     ConnectionState m_connectionState = ConnectionState::Disconnected;
     QString m_lastError;
@@ -136,7 +154,6 @@ private:
     std::optional<ConnectionParameters> m_pendingConnection;
 
     std::unique_ptr<core::xmpp::XmppServiceDiscovery> m_discovery;
-
 
 };
 

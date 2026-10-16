@@ -1,6 +1,6 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick 2.15
-import QtQuick.Layouts
-import QtQuick.Effects
 import QtQuick.Controls
 
 import Features.Chat
@@ -10,120 +10,42 @@ Item {
 
     id: root
     implicitWidth: 600
-    implicitHeight: contentItem.height + 8
+    implicitHeight: messageLoader.implicitHeight
 
     // Exposed for MessagingBody's hit testing and context-menu positioning.
-    property alias bubbleItem: bubble
+    readonly property Item bubbleItem: messageLoader.item ? messageLoader.item.bubbleItem : null
+
+
+    required property var viewmodel
+    property var messagingViewModel: null
 
     property int maxBubbleWidth: 400
-    property bool isOutgoing: true
-    property bool isSeen: false
-    property string msg: ""
-    property string date: ""
     property bool selectionMode: false
+    property real removalProgress: 0
+
+    // Allocate an offscreen texture only while this bubble is disappearing.
+    readonly property bool supportsDissolve: GraphicsInfo.api !== GraphicsInfo.Software
+    opacity: supportsDissolve ? 1 : 1 - removalProgress
+    layer.enabled: removalProgress > 0 && supportsDissolve
+    layer.effect: ShaderEffect {
+        property var source
+        property real progress: root.removalProgress
+        property vector2d itemSize: Qt.vector2d(root.width, root.height)
+        fragmentShader: "qrc:/chat/shaders/message_dissolve.frag.qsb"
+    }
+
+    property bool isOutgoing: viewmodel ? viewmodel.isMine :  false
+    property bool isSeen: viewmodel ? viewmodel.seen : false
+    property string msg: viewmodel ? viewmodel.body : ""
+    property string date: viewmodel ? viewmodel.sentAt : ""
+    property int msgType: viewmodel ? viewmodel.msgType : -1
+    property var fileLocation: viewmodel ? viewmodel.filePath : ""
 
     readonly property int padding: 8
-    readonly property bool isMaxWidth: txtMessage.implicitWidth > (maxBubbleWidth - (msgStatus.implicitWidth + 8*5))
 
     // --- selection state ---
     property bool selected: false
 
-    RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: root.selectionMode ? checkbox.width  : 0
-
-        Behavior on anchors.leftMargin {
-            NumberAnimation { duration: 120 }
-        }
-        Item {
-            visible: root.isOutgoing
-            Layout.fillWidth: true
-        }
-
-        Bubble {
-            id: bubble
-            Layout.preferredWidth: Math.min(400, Math.max(50, contentItem.width + 8))
-            Layout.preferredHeight: /*Math.max(45, contentItem.height)*/ contentItem.height + 8
-
-            outgoing: root.isOutgoing
-            showTail: true
-
-            color: root.selected ? Colors.primary700 : root.isOutgoing ? Colors.primary800.alpha(0.7) : Colors.black800.alpha(0.7)
-            GridLayout {
-                id: contentItem
-                columns: root.isMaxWidth ? 1 : 2
-                rowSpacing: 0
-                columnSpacing: 0
-
-                Text {
-                    id: txtMessage
-                    Layout.topMargin: root.padding
-                    Layout.bottomMargin: root.padding
-                    Layout.leftMargin: root.isOutgoing ? root.padding : root.padding * 2.5
-                    Layout.rightMargin:  root.padding
-
-                    Layout.preferredWidth: width <= 400 - 24 ? width  : (400 - 24)
-                    Layout.fillHeight: true
-                    text: root.msg
-                    wrapMode: Text.ElideNone
-
-                    maximumLineCount: 0
-                    color: Colors.textPrimary
-                    font.family: Typography.family
-                    font.pixelSize: Typography.body
-                    font.weight: Typography.regular
-                }
-
-                RowLayout {
-                    id: msgStatus
-                    Layout.alignment: root.isMaxWidth ? Qt.AlignRight : Qt.AlignBottom
-                    Layout.rightMargin: root.isOutgoing ? root.padding : root.isMaxWidth ? root.padding : 0
-
-                    Text {
-                        id: txtDate
-
-                        text: root.date
-                        color: Colors.primary600
-                        font.family: Typography.family
-                        font.pixelSize: Typography.caption
-                        font.weight: Typography.regular
-                    }
-
-                    Item {
-
-                        visible: root.isOutgoing
-                        Layout.preferredHeight: root.isSeen ? 20 : 15
-                        Layout.preferredWidth: height
-
-                        Image {
-                            id: icon
-                            anchors.fill: parent
-                            source: root.isSeen ? AppAssets.icDuobleCheck :  AppAssets.icCheck
-                            visible: false
-                            fillMode: Image.PreserveAspectFit
-                        }
-
-                        MultiEffect {
-                            anchors.fill: icon
-                            source: icon
-                            brightness: 1.0
-
-                            colorization: 1.0
-                            colorizationColor: Colors.primary
-                        }
-                    }
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    console.log("Hello")
-                }
-            }
-        }
-
-    }
 
     // --- Check Box ---
     CheckBox {
@@ -166,6 +88,124 @@ Item {
         }
     }
 
+
+    Loader {
+        id: messageLoader
+        anchors.fill: parent
+        anchors.leftMargin: root.selectionMode ? checkbox.width : 0
+
+        Behavior on anchors.leftMargin {
+            NumberAnimation { duration: 120 }
+        }
+
+        sourceComponent: {
+
+            switch (root.msgType) {
+                case 0:
+                 return textMessage
+                case 1:
+                    // voice
+                    return voiceMessage
+                case 2:
+                    // video
+                    break
+                case 3:
+                    // location
+                    break
+                case 4:
+                    return imageMessage
+                case 5:
+                    return fileMessage
+                case 6:
+                    return stickerMessage
+                default:
+                    break
+            }
+        }
+    }
+
+    // Message view component
+    Component {
+        id: stickerMessage
+        StickerView {
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            isOutgoing: root.isOutgoing
+            isSeen: root.isSeen
+            date: root.date
+            selected: root.selected
+            fileLocation: root.fileLocation
+        }
+    }
+
+    Component {
+        id: fileMessage
+
+        FileMessageView {
+            readonly property var modelData: root.viewmodel && root.viewmodel.contents
+                                             ? root.viewmodel.contents[0] : root.viewmodel
+
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            messagingViewModel: root.messagingViewModel
+            messageId: root.viewmodel ? root.viewmodel.id : ""
+            contentIndex: 0
+            downloadProgress: modelData ? modelData.downloadProgress : null
+            isDownloading: modelData ? modelData.isDownloading : false
+            downloadedFile: modelData ? modelData.downloadedFile : ""
+            downloadError: modelData ? modelData.downloadError : ""
+            uploadProgress:  modelData ? modelData.uploadProgress : 0
+            isUploading: modelData ?  modelData.isUploading : false
+            isOutgoing: root.isOutgoing
+            isSeen: root.isSeen
+            msg:  root.msg
+            date: root.date
+            selected: root.selected
+            selectionMode: root.selectionMode
+            fileLocation: modelData ? modelData.filePath : ""
+            displayName: modelData ?  modelData.fileName : ""
+            fileSize: modelData ? modelData.fileSize : 0
+        }
+    }
+
+    Component {
+        id: imageMessage
+        ImageMessageView {
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            isOutgoing: root.isOutgoing
+            isSeen: root.isSeen
+            msg: root.msg
+            date: root.date
+            selected: root.selected
+            selectionMode: root.selectionMode
+            contents: root.viewmodel && root.viewmodel.contents ? root.viewmodel.contents : []
+            fileLocation: root.fileLocation
+        }
+    }
+
+    Component {
+        id: textMessage
+        TextMessageView {
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            isOutgoing: root.isOutgoing
+            isSeen: root.isSeen
+            msg: root.msg
+            date: root.date
+            selected: root.selected
+        }
+    }
+    Component {
+        id: voiceMessage
+        VoiceMessageView {
+            messagingViewModel: root.messagingViewModel
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            isOutgoing: root.isOutgoing
+            isSeen: root.isSeen
+            msg: root.msg
+            date: root.date
+            selected: root.selected
+            fileLocation: root.fileLocation
+            duration: root.viewmodel ? root.viewmodel.duration : 0
+        }
+    }
 
 
 

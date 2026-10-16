@@ -11,27 +11,34 @@ qt_add_qml_module(authentication
     QML_FILES
         ${AUTH_QML_FILES}
     SOURCES
-        presentation/viewmodel/login_vm.hpp
-        presentation/viewmodel/login_vm.cpp
+
+        data/repository/session_repository_impl.hpp
+        data/repository/session_repository_impl.cpp
         data/repository/login_repository_impl.hpp
         data/repository/login_repository_impl.cpp
         data/local/login_response_store.hpp
         data/local/login_response_store.cpp
         data/dto/login_response_dto.hpp
-        domain/entity/login_request.hpp
-        domain/repository/login_repository.hpp
+        data/dto/login_request_dto.hpp
+        data/dto/local_user.hpp
+        data/dto/refresh_token_response_dto.hpp
+        data/mapping/login_mapper.hpp
 
+        domain/entity/login_request.hpp
+        domain/entity/login_response.hpp
+
+        domain/repository/login_repository.hpp
+        domain/repository/session_repository.hpp
         domain/usecase/login_use_case.hpp
         domain/usecase/login_use_case.cpp
-        domain/entity/login_response.hpp
-        SOURCES data/dto/login_request_dto.hpp
-        SOURCES data/mapping/login_mapper.hpp
-        SOURCES data/dto/local_user.hpp
-        SOURCES domain/repository/session_repository.hpp
-        SOURCES data/repository/session_repository_impl.hpp data/repository/session_repository_impl.cpp
-        SOURCES domain/usecase/session_usecase.hpp domain/usecase/session_usecase.cpp
-        SOURCES domain/usecase/logout_usecase.hpp domain/usecase/logout_usecase.cpp
-        SOURCES data/dto/refresh_token_response_dto.hpp
+        domain/usecase/session_usecase.hpp
+        domain/usecase/session_usecase.cpp
+        domain/usecase/logout_usecase.hpp
+        domain/usecase/logout_usecase.cpp
+
+        presentation/viewmodel/login_vm.hpp
+        presentation/viewmodel/login_vm.cpp
+
 )
 
 target_include_directories(authentication

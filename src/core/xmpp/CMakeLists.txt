@@ -1,4 +1,6 @@
 add_library(xmpp STATIC
+    file_upload_operation.hpp
+    file_upload_operation.cpp
     xmpp_manager.hpp
     xmpp_manager.cpp
     xmpp_service_discovery.cpp

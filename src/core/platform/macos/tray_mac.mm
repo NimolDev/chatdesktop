@@ -1,7 +1,5 @@
 #include "tray_mac.hpp"
 
-
-
 #include <QApplication>
 #include <QWindow>
 
@@ -16,6 +14,7 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 
+#import "app/app_state.hpp"
 
 // MARK: - TrayAction handler
 @interface TrayActionHandler: NSObject
@@ -75,16 +74,20 @@
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender
                     hasVisibleWindows:(BOOL)flag
 {
-    NSLog(@"Dock icon clicked");
     if (self.reopenHandler) {
         self.reopenHandler();
     }
     return YES;
 }
+
+-(void)applicationWillTerminate: (NSNotification *)nofication {
+    NSApp.dockTile.badgeLabel = 0;
+}
 -  (NSMenu *)applicationDockMenu: (NSApplication *)sender
 {
     return self.dockMenu;
 }
+
 
 - (void)dealloc
 {
@@ -176,7 +179,7 @@ void core::platform::macos::TrayMac::setup(QWindow *window, QApplication *applic
         return;
     }
     createIcon ();
-    button.image = d->icon;
+    updateIcon();
 
     button.target = d->handler;
     button.action = @selector(trayIconClicked:);
@@ -194,11 +197,20 @@ void core::platform::macos::TrayMac::aboutToShowRequests()
         if (!d->statusItem.button || !d->menu) {
             return;
         }
+
+        if (d->window->isActive ()) {
+            d->openItem.title = NSLocalizedString (@"Minimize to tray", @"");
+        } else {
+            NSString *appName = [[NSProcessInfo processInfo] processName];
+            NSString *open = [NSString stringWithFormat:@"Open %@", appName];
+            d->openItem.title = open;
+        }
         // Attaching the menu during a click does not open it for that same event.
         d->statusItem.menu = d->menu;
         [d->statusItem.button performClick: nil];
         // Resume custom click handling after native menu tracking finishes.
         d->statusItem.menu = nil;
+
         return;
     } else {
         if (d->window->isActive ()) {
@@ -231,7 +243,10 @@ void core::platform::macos::TrayMac::showFromTrayRequest()
 void core::platform::macos::TrayMac::hideToTrayRequest()
 {
     if(d->window->isActive ()) {
-        d->openItem.title = NSLocalizedString (@"Open" , @"");
+        NSString *appName = [[NSProcessInfo processInfo] processName];
+
+        NSString *open = [NSString stringWithFormat:@"Open %@", appName];
+        d->openItem.title = open;
         d->window->hide ();
     } else {
         showFromTrayRequest ();
@@ -301,6 +316,107 @@ void core::platform::macos::TrayMac::setTooltip(const QString &tooltip)
     d->statusItem.button.toolTip = [NSString stringWithUTF8String: tooltip.toUtf8 ().constData ()];
 }
 
+
+
+void core::platform::macos::TrayMac::createIcon()
+{
+    const QByteArray bytes = getTrayIconData ();
+    NSData *data = [NSData dataWithBytes: bytes.constData ()
+                                  length: bytes.size()];
+    NSImage *image = [[NSImage alloc] initWithData: data];
+    image.size = NSMakeSize (18.0, 18.0);
+    d->icon = image;
+}
+
+void core::platform::macos::TrayMac::updateIcon()
+{
+
+    const int count = core::app::AppState::instance ().notificationCount ();
+
+    NSString *badgeText = count > 99 ? NSLocalizedString (@"99+", @"") : [NSString stringWithFormat:@"%d", count];
+
+
+    NSApp.dockTile.badgeLabel = count > 0 ? badgeText : NSLocalizedString (@"", @"");
+    if (!d->statusItem.button || !d->icon) {
+        return;
+    }
+    if (count <= 0) {
+        d->statusItem.button.image = d->icon;
+        return;
+    }
+
+    const NSSize canvaSize = NSMakeSize (18.0, 18.0);
+    NSImage *result = [[[NSImage alloc] initWithSize: canvaSize] autorelease];
+    [result lockFocus];
+
+    // Draw the normal status-bar icon.
+
+    [d->icon drawInRect:NSMakeRect (0, 0,18.0 ,20.0)
+                   fromRect: NSZeroRect
+                  operation: NSCompositingOperationSourceOver
+                   fraction: 1.0];
+
+    NSDictionary *attributes = @{
+        NSFontAttributeName: [NSFont systemFontOfSize: 8.0],
+        NSForegroundColorAttributeName: NSColor.whiteColor
+    };
+
+    NSSize textSize = [badgeText sizeWithAttributes: attributes];
+
+    const CGFloat badgeHeight = 11.0;
+    // const CGFloat badgeWidth = MAX (13.0, textSize.width + 5.0);
+
+    // Appklit coordinates start at the bottom-left.
+    NSRect badgeRect = NSMakeRect (0.0,
+                                  -2.0,
+                                  canvaSize.width,
+                                  badgeHeight);
+    [NSColor.systemRedColor setFill];
+
+    NSBezierPath *badge = [NSBezierPath bezierPathWithRoundedRect: badgeRect
+                                                          xRadius: badgeHeight / 2.0
+                                                          yRadius: badgeHeight / 2.0];
+    [badge fill];
+    NSPoint textPoint = NSMakePoint (
+        NSMidX (badgeRect) - textSize.width / 2.0,
+        NSMidY (badgeRect) - textSize.height / 2.0);
+
+    [badgeText drawAtPoint: textPoint withAttributes: attributes];
+    [result unlockFocus];
+    d->statusItem.button.image = result;
+
+}
+
+bool core::platform::macos::TrayMac::hasIcon()
+{
+    return d->icon;
+}
+void core::platform::macos::TrayMac::detroyIcon()
+{
+    d->statusItem.button.image = nil;
+}
+
+void core::platform::macos::TrayMac::createMenu()
+{
+
+}
+
+void core::platform::macos::TrayMac::destroyMenu()
+{
+
+}
+
+void core::platform::macos::TrayMac::addAction()
+{
+
+}
+
+void core::platform::macos::TrayMac::addSeperate()
+{
+    [d->menu addItem: NSMenuItem.separatorItem];
+}
+
+
 void core::platform::macos::TrayMac::setOpenCallback(std::__1::function<void ()> callback)
 {
     d->openCallback = std::move (callback);
@@ -335,103 +451,6 @@ void core::platform::macos::TrayMac::setTrayClickCallback(std::function<void ()>
     };
 }
 
-void core::platform::macos::TrayMac::createIcon()
-{
-    const QByteArray bytes = getTrayIconData ();
-    NSData *data = [NSData dataWithBytes: bytes.constData ()
-                                  length: bytes.size()];
-    NSImage *image = [[NSImage alloc] initWithData: data];
-    image.size = NSMakeSize (18.0, 18.0);
-    d->icon = image;
-}
-
-void core::platform::macos::TrayMac::updateIcon()
-{
-
-    //TODO: Read unread notification from local cache notification.
-    int count = 100;
-    if (count <= 0) {
-        d->statusItem.button.image = d->icon;
-        return;
-    }
-    NSString *label = count > 99 ? NSLocalizedString (@"99+", @"") : [NSString stringWithFormat: @"%d", count];
-    const NSSize canvaSize = NSMakeSize (18.0, 18.0);
-    NSImage *result = [[[NSImage alloc] initWithSize: canvaSize] autorelease];
-    [result lockFocus];
-
-    // Draw the normal status-bar icon.
-
-    [d->icon drawInRect:NSMakeRect (0, 0,18.0 ,20.0)
-                   fromRect: NSZeroRect
-                  operation: NSCompositingOperationSourceOver
-                   fraction: 1.0];
-
-    NSDictionary *attributes = @{
-        NSFontAttributeName: [NSFont systemFontOfSize: 7.0],
-        NSForegroundColorAttributeName: NSColor.whiteColor
-    };
-
-    NSSize textSize = [label sizeWithAttributes: attributes];
-
-    const CGFloat badgeHeight = 11.0;
-    const CGFloat badgeWidth = MAX (13.0, textSize.width + 5.0);
-
-    // Appklit coordinates start at the bottom-left.
-    NSRect badgeRect = NSMakeRect (0.0,
-                                  -2.0,
-                                  canvaSize.width,
-                                  badgeHeight);
-    [NSColor.systemRedColor setFill];
-
-    NSBezierPath *badge = [NSBezierPath bezierPathWithRoundedRect: badgeRect
-                                                          xRadius: badgeHeight / 2.0
-                                                          yRadius: badgeHeight / 2.0];
-    [badge fill];
-    NSPoint textPoint = NSMakePoint (
-        NSMidX (badgeRect) - textSize.width / 2.0,
-        NSMidY (badgeRect) - textSize.height / 2.0);
-
-    [label drawAtPoint: textPoint withAttributes: attributes];
-    [result unlockFocus];
-    d->statusItem.button.image = result;
-
-    NSApp.dockTile.badgeLabel = count > 0
-                                    ? (count > 99 ? [NSString stringWithFormat: @"99+"]
-                                                  : [NSString stringWithFormat: @"%d",count]
-                                       )
-                                    : nil;
-}
-
-bool core::platform::macos::TrayMac::hasIcon()
-{
-    return d->icon;
-}
-void core::platform::macos::TrayMac::detroyIcon()
-{
-    d->statusItem.button.image = nil;
-}
-
-void core::platform::macos::TrayMac::createMenu()
-{
-
-}
-
-void core::platform::macos::TrayMac::destroyMenu()
-{
-
-}
-
-void core::platform::macos::TrayMac::addAction()
-{
-
-}
-
-void core::platform::macos::TrayMac::addSeperate()
-{
-    [d->menu addItem: NSMenuItem.separatorItem];
-}
-
-
 void core::platform::macos::TrayMac::setEnableNotification(bool enable)
 {
     NSString *notification_title;
@@ -446,7 +465,6 @@ void core::platform::macos::TrayMac::setEnableNotification(bool enable)
     [d->notificationItem setTitle: notification_title];
 
 }
-
 
 
 

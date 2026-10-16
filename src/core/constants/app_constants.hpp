@@ -23,6 +23,7 @@ public:
     [[nodiscard]]static QString group();
     [[nodiscard]]static QString groupMessage(const QString group_id);
     [[nodiscard]] static QString saveMessages();
+    [[nodiscard]] static QString appSecretKey();
 
 
 };

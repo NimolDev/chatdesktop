@@ -9,9 +9,7 @@ Item {
     id: body
 
     property var model
-
     property bool isVisible
-
     property bool selectionMode: false
     property int selectionRevision: 0
     property var selectionLookup: null
@@ -34,34 +32,74 @@ Item {
         listView.dragSelectValue = false
     }
 
-    function adjustForComposerHeight(delta) {
-        Qt.callLater(() => {
-            listView.contentY = listView.clampContentY(listView.contentY + delta)
-        })
+    property real previousBodyHeight: 0
+    property real resizeContentY: 0
+    property real stableContentY: 0
+    property bool resizing: false
+    property bool followLatest: false
+    property bool initialLoadComplete: false
+    property bool initialPositionReady: false
+
+    function prepareInitialMessages() {
+        initialReveal.stop()
+        initialPositionTimer.stop()
+        initialPositionReady = false
+        listView.opacity = 0
+        listView.animateAppends = false
     }
 
-    function scrollToLatest() {
-        if (listView.count > 0) {
-            scrollToLatestTimer.restart()
+
+    function settleLatestPosition() {
+        if (followLatest && !resizing && !appendScroll.running
+                && !scrollToLatestTimer.running && !listView.paginationPending) {
+            listView.forceLayout()
+            listView.positionViewAtEnd()
         }
     }
 
-    Image {
-        anchors.fill: parent
-        source: body.visible ? "qrc:/background/background.png" : ""
-        fillMode: Image.Tile
-        sourceSize: Qt.size(512, 512)
-        smooth: false
-        mipmap: true
-        asynchronous: true
-        cache: true
+    Component.onCompleted: previousBodyHeight = height
+    onHeightChanged: {
+        const previousHeight = previousBodyHeight
+        previousBodyHeight = height
+        if (previousHeight <= 0 || height <= 0) {
+            return
+        }
+
+        if (!resizing) {
+            resizeContentY = stableContentY
+            resizing = true
+            appendScroll.stop()
+        }
+        resizeContentY += previousHeight - height
+        Qt.callLater(restoreResizePosition)
     }
+
+    function restoreResizePosition() {
+        listView.forceLayout()
+        listView.contentY = listView.clampContentY(resizeContentY)
+        stableContentY = listView.contentY
+        resizing = false
+    }
+
+    function scrollToLatest(animated = true) {
+        followLatest = true
+        // The model can notify before ListView has processed the new rows.
+        scrollToLatestTimer.animated = animated && listView.animateAppends
+        scrollToLatestTimer.restart()
+    }
+
+
 
     ListView {
         id: listView
+        objectName: "messageList"
+
+        property bool animateAppends: false
         anchors.fill: parent
         clip: true
         visible: true
+        opacity: 0
+        enabled: body.initialPositionReady
 
         property bool dragSelecting: false
         property bool dragSelectValue: true
@@ -70,6 +108,9 @@ Item {
             minimumContentY,
             originY + contentHeight + listView.bottomMargin - height
         )
+        readonly property real distanceFromBottom: Math.max(0, maximumContentY - contentY)
+
+        readonly property bool isNearBottom: distanceFromBottom <= 10
 
         property int loadMoreThreshold: 200
         property bool paginationPending: false
@@ -83,6 +124,27 @@ Item {
             0,
             body.height - contentHeight - bottomMargin
         )
+        Behavior on anchors.topMargin {
+            enabled: listView.animateAppends && !listView.paginationPending
+                     && !body.resizing && body.model && !body.model.isLoading
+            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+        }
+
+        add: Transition {
+            enabled: listView.animateAppends && !listView.paginationPending
+                     && body.model && !body.model.isLoading
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180 }
+                NumberAnimation {
+                    property: "scale"
+                    from: 0.97
+                    to: 1
+                    duration: 240
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+
         // bottomMargin: 20
         footer: Item {
                 width: listView.width
@@ -117,6 +179,26 @@ Item {
             )
         }
 
+        // Layout changes (especially delayed removals) also move contentY.
+        // Only an explicit scroll should fetch history and release bottom anchoring.
+        function requestOlderMessages() {
+            const distanceToTop = contentY - minimumContentY
+            if (distanceToTop < loadMoreThreshold
+                    && body.model
+                    && !body.model.isLoading
+                    && !paginationPending
+                    && !body.resizing
+                    && body.height === body.previousBodyHeight
+                    && !appendScroll.running
+                    && !scrollToLatestTimer.running) {
+                scrollToLatestTimer.stop()
+                body.followLatest = false
+                capturePaginationAnchor()
+                paginationPending = true
+                body.model.fetchNextMessage()
+            }
+        }
+
         function capturePaginationAnchor() {
             paginationAnchorIndex = -1
             paginationAnchorOffset = 0
@@ -134,7 +216,6 @@ Item {
         // -------------------------
         // Sections
         // -------------------------
-
         section.property: "section"
         section.criteria: ViewSection.FullString
         section.labelPositioning: ViewSection.InlineLabels
@@ -171,54 +252,114 @@ Item {
         // Message delegate
         // -------------------------
 
-         delegate: MessageBubble {
+        delegate: MessageBubble {
             id: messageDelegate
             required property var model
             required property int index
             readonly property int messageIndex: index
+            transformOrigin: isOutgoing ? Item.Right : Item.Left
 
             width: ListView.view.width
+            property real removalHeight: -1
+            property real collapseProgress: 0
+            height: removalHeight >= 0
+                    ? removalHeight * (1 - collapseProgress) : implicitHeight
 
+            viewmodel: model
+            messagingViewModel: body.model
             selected: body.isMessageSelected(index)
             selectionMode: body.selectionMode
-            isSeen: true
-             // A Loader creates this item before onLoaded assigns the
-             // delegate's model object. Keep the initial binding
-             // evaluation (and model resets) safe while it is null.
-            msg: model ? model.body : ""
-            date: model ? model.sentAt : ""
-            isOutgoing: model ? model.isMine : false
-         }
 
+            ListView.onRemove: {
+                if (body.isVisible && listView.animateAppends
+                        && body.model && !body.model.isLoading) {
+                    // Reserve this row until its pixels have disappeared.
+                    ListView.delayRemove = true
+                    removalHeight = height
+                    removalAnimation.start()
+                }
+            }
+
+            SequentialAnimation {
+                id: removalAnimation
+                NumberAnimation {
+                    target: messageDelegate
+                    property: "removalProgress"
+                    from: 0
+                    to: 1
+                    duration: 400
+                    easing.type: Easing.Linear
+                }
+                // Let ListView lay out the shrinking row on every frame. A
+                // removeDisplaced y animation competes with bottom anchoring
+                // and asynchronous media sizing, leaving neighboring rows overlapping.
+                NumberAnimation {
+                    target: messageDelegate
+                    property: "collapseProgress"
+                    from: 0
+                    to: 1
+                    duration: 220
+                    easing.type: Easing.InOutCubic
+                }
+                onStopped: messageDelegate.ListView.delayRemove = false
+            }
+
+            Connections {
+                target: listView
+                function onAnimateAppendsChanged() {
+                    if (!listView.animateAppends) {
+                        removalAnimation.stop()
+                    }
+                }
+            }
+        }
 
         verticalLayoutDirection: ListView.TopToBottom
+        onContentHeightChanged: Qt.callLater(body.settleLatestPosition)
+        onMovementStarted: body.followLatest = false
         Component.onCompleted: {
-            body.scrollToLatest()
+            body.initialLoadComplete = body.model && !body.model.isLoading
+            body.scrollToLatest(false)
         }
         onVisibleChanged: {
             if (visible)
-                body.scrollToLatest()
+                body.scrollToLatest(false)
         }
         onContentYChanged: {
-            const distanceToTop = contentY - minimumContentY
-            if (distanceToTop < loadMoreThreshold
-                    && body.model
-                    && !body.model.isLoading
-                    && !paginationPending) {
-                scrollToLatestTimer.stop()
-                capturePaginationAnchor()
-                paginationPending = true
-                body.model.fetchNextMessage()
+            // Geometry changes can clamp contentY before onHeightChanged runs.
+            if (!body.resizing && body.height === body.previousBodyHeight) {
+                body.stableContentY = contentY
             }
+            if (verticalScrollBar.pressed) {
+                requestOlderMessages()
+            }
+            const distantFromBottom = (contentY - maximumContentY) <= -200
+            fabContent.visible = distantFromBottom
         }
 
         Connections {
             target: body.model
 
+            function onRowsInserted(parent, first, last) {
+                if (!body.model.isLoading && !listView.paginationPending) {
+                    body.scrollToLatest()
+                }
+            }
+
+            function onModelAboutToBeReset() {
+                body.initialLoadComplete = false
+                body.prepareInitialMessages()
+                body.followLatest = false
+                appendScroll.stop()
+                scrollToLatestTimer.stop()
+                listView.animateAppends = false
+            }
+
             function onInitialMessagesLoaded() {
+                body.initialLoadComplete = true
                 listView.paginationPending = false
                 listView.paginationAnchorIndex = -1
-                body.scrollToLatest()
+                body.scrollToLatest(false)
             }
 
             function onOlderMessagesLoaded(insertedCount) {
@@ -244,28 +385,6 @@ Item {
             }
         }
 
-        // remove: Transition {
-        //     // Conversation switches set isVisible=false before clearing the
-        //     // model. Do not keep removed delegates alive for their exit
-        //     // animation, or they can overlap a fast-loading conversation.
-        //     enabled: body.isVisible
-        //     ParallelAnimation {
-        //         NumberAnimation {
-        //             property: "opacity"
-        //             from: 1
-        //             to: 0
-        //             duration: 180
-        //         }
-        //         NumberAnimation {
-        //             property: "x"
-        //             to: 100
-        //             duration: 180
-        //             easing.type: Easing.InCubic
-        //         }
-        //     }
-        // }
-
-
         // =====================================================
         // ONE MouseArea controls selection for entire ListView
         // =====================================================
@@ -276,7 +395,12 @@ Item {
             anchors.fill: parent
 
             acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
+            // Observe movement only during selection presses so delegate hover
+            // handlers can receive hover events and provide their own cursors.
+            hoverEnabled: false
+            // MouseArea sets an arrow cursor even when hover is disabled.
+            // Unset it so controls underneath can supply their own cursor.
+            cursorShape: undefined
 
             property var lastItem: null
             property var pressedItem: null
@@ -327,6 +451,18 @@ Item {
                            }
 
                            let delegate = itemUnderMouse(mouse.x, mouse.y)
+
+                           // Non-text bubble controls handle their own pointer gestures.
+                           // Text messages and selection mode keep row selection behavior.
+                           if (!body.selectionMode && delegate
+                                   && delegate.msgType !== 0 && delegate.bubbleItem) {
+                               const bubblePosition = selectionArea.mapToItem(
+                                   delegate.bubbleItem, mouse.x, mouse.y)
+                               if (delegate.bubbleItem.contains(bubblePosition)) {
+                                   mouse.accepted = false
+                                   return
+                               }
+                           }
 
                            pressedItem = delegate
                            pressY = mouse.y
@@ -433,31 +569,177 @@ Item {
             }
             // wheel scrolling
             onWheel: wheel => {
+                         body.followLatest = false
+                         appendScroll.stop()
+                         scrollToLatestTimer.stop()
                          listView.contentY = listView.clampContentY(
                              listView.contentY - wheel.angleDelta.y
                              )
+                         listView.requestOlderMessages()
                          verticalScrollBar.active = true
                          scrollIndicatorTimer.restart()
                          wheel.accepted = true
                     }
         }
     }
+    Rectangle {
+        id: fabContent
+        visible: false
+        implicitWidth: 50
+        implicitHeight: 50
+
+        x: parent.width - width - AppLayouts.x_padding
+        y: visible ? parent.height - (30 + implicitHeight) : parent.height
+        z: 1
+        color: "transparent"
+
+
+        Rectangle {
+            id: notSeenContent
+            property int count: 0
+
+            visible: count > 0
+            height: 20
+            width: Math.max(height, txtNotSeenCount.implicitWidth + 8)
+            z:1
+            anchors {
+                top: parent.top
+                horizontalCenter: parent.horizontalCenter
+            }
+            color: Colors.primary
+            radius: height/2
+            clip: true
+
+            Text {
+                id: txtNotSeenCount
+                text: notSeenContent.count > 1000 ? "999+" : notSeenContent.count
+                color: Colors.black500
+                font.family: Typography.family
+                font.pixelSize: Typography.body
+                font.weight: Typography.semiBold
+                horizontalAlignment: Text.AlignHCenter
+
+                anchors.fill: parent
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+            }
+        }
+
+        Button {
+            id: btnScrollToLast
+            width: 45
+            height: 45
+            padding: AppLayouts.x_padding
+            anchors {
+                top: notSeenContent.bottom
+                topMargin: -8
+                horizontalCenter: parent.horizontalCenter
+            }
+
+            background: Rectangle {
+                color: Colors.suface1
+                radius: width/2
+                clip: true
+                border.width: 1
+                border.color: Colors.suface2
+            }
+            contentItem: Image {
+                source: AppAssets.icChevronUp
+                fillMode: Image.PreserveAspectFit
+                rotation: 180
+            }
+            hoverEnabled: true
+
+            onClicked: {
+                body.scrollToLatest(true)
+
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: parent.clicked()
+            }
+        }
+
+        Behavior on y {
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutCubic
+            }
+        }
+    }
+    NumberAnimation {
+        id: appendScroll
+        target: listView
+        property: "contentY"
+        duration: 240
+        easing.type: Easing.OutCubic
+        onFinished: Qt.callLater(body.settleLatestPosition)
+    }
 
     Timer {
         id: scrollToLatestTimer
+        property bool animated: false
 
         interval: 10
         repeat: false
         onTriggered: {
-            if (!listView.visible || listView.count === 0) {
+            listView.forceLayout()
+            if (!listView.visible || !body.initialLoadComplete) {
                 stop()
                 return
             }
 
-            listView.forceLayout()
-            listView.currentIndex = listView.count - 1
-            listView.positionViewAtEnd()
+            appendScroll.stop()
+            if (animated) {
+                // Instantiate the last rows before choosing the target. The
+                // estimated contentHeight can otherwise leave a gap or require
+                // a visible correction after the animation.
+                const startY = listView.contentY
+                listView.positionViewAtEnd()
+                listView.forceLayout()
+                const endY = listView.contentY
+                // Limit distant jumps to one viewport so the final rows stay
+                // instantiated and their geometry remains stable while scrolling.
+                const animationStartY = Math.max(startY, endY - listView.height)
+                listView.contentY = animationStartY
+                appendScroll.from = animationStartY
+                appendScroll.to = endY
+                appendScroll.start()
+            } else {
+                listView.positionViewAtEnd()
+            }
+            if (!body.initialPositionReady) {
+                initialPositionTimer.restart()
+            } else {
+                listView.animateAppends = true
+            }
         }
     }
+
+    // Allow the final delegates and section headers a layout pass before reveal.
+    Timer {
+        id: initialPositionTimer
+        interval: 16
+        onTriggered: {
+            listView.forceLayout()
+            listView.positionViewAtEnd()
+            body.stableContentY = listView.contentY
+            body.initialPositionReady = true
+            listView.animateAppends = true
+            initialReveal.start()
+        }
+    }
+
+    NumberAnimation {
+        id: initialReveal
+        target: listView
+        property: "opacity"
+        from: 0
+        to: 1
+        duration: 180
+        easing.type: Easing.OutCubic
+    }
+
 
 }

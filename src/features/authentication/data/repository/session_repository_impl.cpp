@@ -1,9 +1,11 @@
 #include "session_repository_impl.hpp"
+#include "storage/message_cache.hpp"
 
 #include "constants/app_constants.hpp"
 #include "local/login_response_store.hpp"
 #include "utils/token_validator.hpp"
 #include "dto/refresh_token_response_dto.hpp"
+
 #include <utility>
 
 
@@ -31,7 +33,6 @@ QFuture<bool> SessionRepositoryImpl::sessionChecked()
         // return QtFuture::makeReadyFuture(false);
         return QtFuture::makeReadyValueFuture (false);
     }
-    // qDebug() << "token: " << m_user->access_token;
     QString refresh_token = m_user->refresh_token;
     QString access_token = m_user->access_token;
 
@@ -50,6 +51,7 @@ bool SessionRepositoryImpl::logout()
     bool logout = data::local::LoginResponseStore::logout ();
     qDebug() << "Repo:"<<logout;
     if (logout) {
+        core::storage::MessageCache::closeAll();
         if (m_xmpp) {
             m_xmpp->closeConnection();
         }

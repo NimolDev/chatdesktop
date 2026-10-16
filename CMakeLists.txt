@@ -40,11 +40,11 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOMOC ON)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 REQUIRED COMPONENTS
+find_package(Qt6 6.8 REQUIRED COMPONENTS
     Quick
     QuickControls2
     Multimedia
@@ -53,14 +53,13 @@ find_package(Qt6 REQUIRED COMPONENTS
     Network
     LinguistTools
     Xml
-    Sql
     Positioning
     Location
     Concurrent
     Test
 )
 
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.8)
 
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
 

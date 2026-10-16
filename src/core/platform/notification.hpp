@@ -19,7 +19,6 @@ public:
 };
 
 } // namespace platform
-
 } // namespace core
 
 #endif // NOTIFICATION_HPP

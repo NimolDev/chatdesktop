@@ -17,6 +17,7 @@ Item {
     property int padding: 0
     property bool isCompactMode: false
     property var model
+    property int previousIndex: -1
 
 
     signal expandRequested()
@@ -83,13 +84,12 @@ Item {
                     isCompactMode: root.isCompactMode
                     username: model.name
 
-                    isSelected: root.isSelected ? listUser.currentIndex === index : 0
+                    isSelected: root.isSelected ? root.previousIndex === index : 0
 
                     onItemClicked: {
                         listUser.currentIndex = index
                         root.isSelected = true
                         root.itemClicked(index,model.name, model.uuid)
-                        // console.log(model.uuid)
                     }
                 }
 

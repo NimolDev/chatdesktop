@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 20.0.1, 2026-09-27T20:14:17. -->
+<!-- Written by QtCreator 20.0.2, 2026-10-09T17:01:11. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -81,7 +81,8 @@
     <value type="int" key="CMake.Configure.BaseEnvironment">2</value>
     <value type="bool" key="CMake.Configure.ClearSystemEnvironment">false</value>
     <value type="UnknownType" key="CMake.Configure.UserEnvironmentChanges"></value>
-    <value type="QString" key="CMake.Initial.Parameters">-DCMAKE_BUILD_TYPE:STRING=Debug
+    <value type="QString" key="CMake.Initial.Parameters">-DAPPLE_SIGNING_IDENTITY:STRING=0F4E48CFAEC6DFD06E174D798B01526E1C46CCA5
+-DCMAKE_BUILD_TYPE:STRING=Debug
 -DCMAKE_COLOR_DIAGNOSTICS:BOOL=ON
 -DCMAKE_CXX_COMPILER:FILEPATH=%{Compiler:Executable:Cxx}
 -DCMAKE_C_COMPILER:FILEPATH=%{Compiler:Executable:C}

@@ -334,6 +334,11 @@ QString AppConstants::saveMessages()
     return getKey (generated::app_constants::kSaveMessages);
 }
 
+QString AppConstants::appSecretKey()
+{
+    return getKey(generated::app_constants::kAppSecretKey);
+}
+
 
 
 

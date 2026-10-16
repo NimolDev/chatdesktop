@@ -7,6 +7,7 @@
 #include "mapping/login_mapper.hpp"
 #include "local/login_response_store.hpp"
 
+
 using namespace core::constants;
 
 namespace data {
@@ -38,14 +39,13 @@ LoginRepositoryImpl::LoginRepositoryImpl(
         );
 }
 
-void LoginRepositoryImpl::login(domain::entity::LoginRequest  request)
+void LoginRepositoryImpl::login(domain::entity::LoginRequest request)
 {
 
     /*
      * Login to restApi before connect to XMPP Server
      * Api response and connect to xmpp
      */
-
     m_request = data::mapping::toDto (request);
     QJsonObject body = core::network::JsonSerializer::toObject (m_request);
     m_network->post (core::constants::AppConstants::login (), body)
@@ -66,22 +66,10 @@ void LoginRepositoryImpl::login(domain::entity::LoginRequest  request)
                 qWarning() << "Login response mapping failed:" << error;
                 return;
             }
-            // // qDebug() << "Response: " << dto->access_token;
-            // // qDebug() << response.body;
-
-            // domain::entity::LoginResponse result = m_response->toDomain();
-            qDebug() << "Response: " << m_response->access_token;
-
-            // const domain::entity::LoginResponse result = m_response->toDomain();
             if (!data::local::LoginResponseStore::save(
-                    m_response.value(),
-                    m_request.password)) {
-                qWarning() << "Login succeeded, but saving the response failed";
-            } else {
-                qDebug() << "Login response saved successfully";
+                    m_response.value(), request.password)) {
+                qWarning() << "Login succeeded, but saving the session failed";
             }
-
-            // m_xmppClient->connectToServer (result.xmpp.jid, request.password, result.xmpp.host, result.xmpp.port );
 
             emit loginSucceded ();
             connectToXmpp ();

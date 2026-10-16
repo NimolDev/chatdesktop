@@ -44,7 +44,7 @@ qt_add_qml_module(ChatApp
         source/app_container.cpp
         source/app_controller.hpp
         source/app_controller.cpp
-        QML_FILES qml/PetWindow.qml
+        QML_FILES
 
 
     # RESOURCES Info.plist
@@ -146,9 +146,15 @@ if(APPLE AND TARGET Qt6::QQmlPreviewServiceFactoryPlugin)
 endif()
 
 
-if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
+if(APPLE)
 
-    message(STATUS "Apple signing enabled")
+    if(DEFINED APPLE_SIGNING_IDENTITY AND NOT APPLE_SIGNING_IDENTITY STREQUAL "")
+        message(STATUS "Apple signing enabled: ${APPLE_SIGNING_IDENTITY}")
+        set(CHATAPP_SIGN_IDENTITY "${APPLE_SIGNING_IDENTITY}")
+    else()
+        message(STATUS "Apple ad-hoc signing enabled")
+        set(CHATAPP_SIGN_IDENTITY "-")
+    endif()
 
     add_custom_command(
         TARGET ChatApp
@@ -157,10 +163,10 @@ if(APPLE AND DEFINED APPLE_SIGNING_IDENTITY)
         COMMAND /usr/bin/codesign
             --force
             --deep
-            --sign "${APPLE_SIGNING_IDENTITY}"
+            --sign "${CHATAPP_SIGN_IDENTITY}"
             "$<TARGET_BUNDLE_DIR:ChatApp>"
 
-        COMMENT "Signing ChatApp with Apple Development certificate"
+        COMMENT "Signing ChatApp"
         VERBATIM
     )
 
@@ -173,6 +179,7 @@ target_link_libraries(ChatApp
         Qt6::QuickControls2
         Qt6::Gui
         Qt6::Widgets
+        core_app
         core::application
         core::storage
         core::utils

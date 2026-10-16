@@ -28,9 +28,16 @@ void JingleService::prepare()
         QMetaObject::invokeMethod(this, &JingleService::prepare, Qt::QueuedConnection);
         return;
     }
-    if (!m_callStarted && prepareMedia(false)) {
-        m_webrtc->prepare();
+    if (m_callStarted) {
+        return;
     }
+    if (!m_webrtc) {
+        createWebrtcClient();
+    }
+    // Prepare the camera on its own thread while WebRTC initializes audio.
+    // This configures capture without starting the camera.
+    m_webrtc->prepare();
+    prepareMedia(false);
 
 }
 

@@ -170,7 +170,6 @@ void JingleExtension::proceed(const QString &recipient, bool video)
 
 void JingleExtension::propose(const QString &recipient, bool video)
 {
-    emit callStateChange (CallState::Calling);
     QList<jingle::StreamType> streams = {jingle::StreamType::Audio};
     if (video) {
         streams.append (jingle::StreamType::Video);

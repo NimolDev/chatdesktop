@@ -29,7 +29,6 @@ void core::platform::macos::MainWindowMac::setup(QWindow *window)
         return;
     }
 
-
     nativeWindow.titleVisibility = NSWindowTitleVisible;
     nativeWindow.titlebarAppearsTransparent = YES;
 }

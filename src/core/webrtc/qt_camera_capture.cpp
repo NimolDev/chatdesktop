@@ -51,6 +51,8 @@ void QtCameraCapture::prepare()
 {
     Q_ASSERT(QThread::currentThread() == thread());
     if (!m_camera) {
+        QElapsedTimer preparationTimer;
+        preparationTimer.start();
         const auto device = m_hasDeviceSelection ? m_device : QMediaDevices::defaultVideoInput();
         if (device.isNull()) {
             emit errorOccurred(QStringLiteral("No usable local camera is available"));
@@ -119,7 +121,8 @@ void QtCameraCapture::prepare()
                     }
                     emit frameReady(preview);
                 });
-        LOG_INFO ("Prepare camera");
+        LOG_INFO(QStringLiteral("Qt camera preparation complete: %1 ms")
+                     .arg(preparationTimer.elapsed()));
     }
 }
 

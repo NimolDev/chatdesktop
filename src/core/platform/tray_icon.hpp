@@ -38,6 +38,7 @@ public:
     virtual void showTrayIcon()  = 0;
     virtual void setTooltip(const QString &tooltip) = 0;
 
+
     virtual void setOpenCallback(std::function<void()> callback) = 0;
     virtual void setQuitCallback(std::function<void()> callback) = 0;
     virtual void setTrayClickCallback(std::function<void()> callback) = 0;

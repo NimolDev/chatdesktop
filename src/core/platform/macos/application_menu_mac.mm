@@ -7,11 +7,21 @@
 @property (nonatomic, copy) void (^aboutHandler)(void);
 @property (nonatomic, copy) void (^settingHandler)(void);
 @property (nonatomic, copy) void (^quitHandler)(void);
+@property (nonatomic, retain) NSPanel *quitPanel;
+@property (nonatomic) BOOL quitKeysHeld;
+@property (nonatomic, retain) NSTimer *quitTimer;
+@property (nonatomic, retain) id quitEventMonitor;
+@property (nonatomic) NSTimeInterval quitHoldStarted;
+@property (nonatomic) unsigned short quitKeyCode;
 
 - (void)didTapAbout:(id)sender;
 - (void)didTapPreferences:(id)sender;
 - (void)didTapQuit:(id)sender;
 - (void)didTapLogout:(id)sender;
+- (void)cancelQuitHold;
+- (void)updateQuitHold:(NSTimer *)timer;
+- (void)observeQuitEvent:(NSEvent *)event;
+- (void)applicationResigned:(NSNotification *)notification;
 
 @end
 
@@ -19,7 +29,6 @@
 
 - (void)didTapAbout:(id)sender
 {
-    Q_UNUSED (sender);
     if (self.aboutHandler) {
         self.aboutHandler();
     }
@@ -27,7 +36,6 @@
 
 - (void)didTapPreferences:(id)sender
 {
-    Q_UNUSED (sender);
     if (self.settingHandler) {
         self.settingHandler();
     }
@@ -35,13 +43,135 @@
 
 - (void)didTapQuit:(id)sender
 {
-    Q_UNUSED (sender);
+    NSEvent *event = NSApp.currentEvent;
+    if (event.type == NSEventTypeKeyDown
+        && (event.modifierFlags & NSEventModifierFlagCommand)
+        && [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"q"]) {
+        if (event.isARepeat) {
+            return;
+        }
+        if (self.quitTimer) {
+            const NSTimeInterval elapsed = NSProcessInfo.processInfo.systemUptime - self.quitHoldStarted;
+            if (!self.quitKeysHeld && elapsed <= 1.0) {
+                [self cancelQuitHold];
+                if (self.quitHandler) {
+                    self.quitHandler();
+                }
+                return;
+            }
+            if (self.quitKeysHeld) {
+                return;
+            }
+            [self cancelQuitHold];
+        }
+        if (!self.quitPanel) {
+            NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 340, 108)
+                styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+                backing:NSBackingStoreBuffered defer:NO];
+            panel.releasedWhenClosed = NO;
+            panel.level = NSFloatingWindowLevel;
+            panel.hasShadow = YES;
+            panel.opaque = NO;
+            panel.backgroundColor = NSColor.clearColor;
+            panel.ignoresMouseEvents = YES;
+            NSVisualEffectView *background = [[NSVisualEffectView alloc] initWithFrame:panel.contentView.bounds];
+            background.material = NSVisualEffectMaterialHUDWindow;
+            background.state = NSVisualEffectStateActive;
+            background.wantsLayer = YES;
+            background.layer.cornerRadius = 16;
+            background.layer.masksToBounds = YES;
+            panel.contentView = background;
+            [background release];
+
+            NSTextField *title = [NSTextField labelWithString:NSLocalizedString(@"Hold ⌘Q to quit", @"")];
+            title.font = [NSFont boldSystemFontOfSize:20];
+            title.alignment = NSTextAlignmentCenter;
+            title.frame = NSMakeRect(20, 57, 300, 28);
+            [panel.contentView addSubview:title];
+            NSTextField *hint = [NSTextField labelWithString:NSLocalizedString(@"Or press ⌘Q again to quit", @"")];
+            hint.textColor = NSColor.secondaryLabelColor;
+            hint.alignment = NSTextAlignmentCenter;
+            hint.frame = NSMakeRect(20, 29, 300, 20);
+            [panel.contentView addSubview:hint];
+            self.quitPanel = panel;
+            [panel release];
+        }
+        NSWindow *window = NSApp.keyWindow;
+        NSRect frame = window ? window.frame : NSScreen.mainScreen.visibleFrame;
+        [self.quitPanel setFrameOrigin:NSMakePoint(NSMidX(frame) - 170, NSMidY(frame) - 54)];
+        self.quitKeysHeld = YES;
+        [self.quitPanel orderFront:nil];
+        self.quitHoldStarted = NSProcessInfo.processInfo.systemUptime;
+        self.quitKeyCode = event.keyCode;
+        self.quitEventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:
+            NSEventMaskKeyUp | NSEventMaskFlagsChanged | NSEventMaskKeyDown
+            handler:^NSEvent *(NSEvent *nextEvent) {
+                [self observeQuitEvent:nextEvent];
+                return nextEvent;
+            }];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationResigned:)
+            name:NSApplicationDidResignActiveNotification object:NSApp];
+        self.quitTimer = [NSTimer timerWithTimeInterval:0.02 target:self
+            selector:@selector(updateQuitHold:) userInfo:nil repeats:YES];
+        [[NSRunLoop mainRunLoop] addTimer:self.quitTimer forMode:NSRunLoopCommonModes];
+        return;
+    }
+    [self cancelQuitHold];
     if (self.quitHandler) {
         self.quitHandler();
     }
 }
+
+- (void)observeQuitEvent:(NSEvent *)event
+{
+    if ((event.type == NSEventTypeKeyUp && event.keyCode == self.quitKeyCode)
+        || (event.type == NSEventTypeFlagsChanged
+            && !(event.modifierFlags & NSEventModifierFlagCommand))) {
+        // Keep the prompt briefly so a second press can confirm quitting.
+        self.quitKeysHeld = NO;
+    } else if (event.type == NSEventTypeKeyDown && event.keyCode != self.quitKeyCode) {
+        [self cancelQuitHold];
+    }
+}
+
+- (void)applicationResigned:(NSNotification *)notification
+{
+    [self cancelQuitHold];
+}
+
+- (void)updateQuitHold:(NSTimer *)timer
+{
+    if (!self.quitTimer) {
+        return;
+    }
+    const NSTimeInterval elapsed = NSProcessInfo.processInfo.systemUptime - self.quitHoldStarted;
+    if (elapsed >= 1.0) {
+        const BOOL shouldQuit = self.quitKeysHeld;
+        [self cancelQuitHold];
+        if (shouldQuit && self.quitHandler) {
+            self.quitHandler();
+        }
+    }
+}
+
+- (void)cancelQuitHold
+{
+    self.quitKeysHeld = NO;
+    [self.quitTimer invalidate];
+    self.quitTimer = nil;
+    if (self.quitEventMonitor) {
+        [NSEvent removeMonitor:self.quitEventMonitor];
+        self.quitEventMonitor = nil;
+    }
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+        name:NSApplicationDidResignActiveNotification object:NSApp];
+    [self.quitPanel orderOut:nil];
+}
+
 - (void)dealloc
 {
+    [self cancelQuitHold];
+    self.quitPanel = nil;
     self.aboutHandler = nil;
     self.settingHandler = nil;
     self.quitHandler = nil;
@@ -76,7 +206,9 @@ core::platform::macos::ApplicationMenuMac::ApplicationMenuMac()
 
 core::platform::macos::ApplicationMenuMac::~ApplicationMenuMac()
 {
-
+    [d->handler cancelQuitHold];
+    d->handler.quitHandler = nil;
+    [d->handler release];
 }
 
 void core::platform::macos::ApplicationMenuMac::setup()
@@ -86,6 +218,12 @@ void core::platform::macos::ApplicationMenuMac::setup()
     }
 
     d->handler = [[ApplicationMenuHandler alloc] init];
+    d->handler.quitHandler = ^{
+        if (d->quitCallback) {
+            const auto callback = d->quitCallback;
+            callback();
+        }
+    };
     // Top-level macOS menu bar
     d->menuBar = [[NSMenu alloc] init];
 
@@ -103,17 +241,17 @@ void core::platform::macos::ApplicationMenuMac::setup()
 
 void core::platform::macos::ApplicationMenuMac::setAboutCallback(std::__1::function<void ()> callback)
 {
-
+    d->aboutCallback = std::move (callback);
 }
 
 void core::platform::macos::ApplicationMenuMac::setSettingCallback(std::__1::function<void ()> callback)
 {
-
+    d->settingCallback = std::move (callback);
 }
 
 void core::platform::macos::ApplicationMenuMac::setQuiteCallback(std::__1::function<void ()> callback)
 {
-
+    d->quitCallback = std::move (callback);
 }
 
 
@@ -179,11 +317,12 @@ void core::platform::macos::ApplicationMenuMac::createAppMenu()
     showAll.target = NSApp;
     [d->appMenu addItem: showAll];
 
-    // Quite
+    // Quit
     NSMenuItem *quit = [[NSMenuItem alloc] initWithTitle: NSLocalizedString (@"Quit", @"")
                                                   action: @selector(didTapQuit:)
                                            keyEquivalent: @"q"];
     quit.target = d->handler;
+    quit.keyEquivalentModifierMask = NSEventModifierFlagCommand;
     [d->appMenu addItem: quit];
 
 #if !__has_feature(objc_arc)
@@ -292,8 +431,6 @@ void core::platform::macos::ApplicationMenuMac::createWindowMenu()
     [windowMenuItem release];
 #endif
 }
-
-
 
 
 

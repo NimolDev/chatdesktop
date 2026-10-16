@@ -19,6 +19,8 @@ qt_add_qml_module(ui
     QML_FILES CircleButton.qml
     QML_FILES GlassBackground.qml
     QML_FILES ContextMenuItem.qml
+    QML_FILES MySlider.qml
+    QML_FILES DownloadCircleButton.qml
 
 )
 

@@ -14,19 +14,18 @@
 #include <QStandardPaths>
 #include <QQuickStyle>
 
+#include "app/app_state.hpp"
+
 #include "application/app_info.hpp"
 #include "localization/language_manager.hpp"
 #include "theme/font_manager.hpp"
 
-#include "storage/database_manager.hpp"
+
 #include "app_container.hpp"
 #include "call_coordinator.hpp"
 
 #include "logging/logger.hpp"
 
-// #ifdef Q_OS_MACOS
-// #include "platform/macos/notification.hpp"
-// #endif
 
 #include "platform/platform_main_window.hpp"
 #include "platform/platform_tray.hpp"
@@ -93,22 +92,7 @@ void permissionRequest() {
     }
 
 }
-void openDBConnection(QGuiApplication &app) {
 
-    if (!core::storage::DatabaseManager::initialize ()) {
-        qCritical() << "Local database initialization failed";
-        return;
-    } else {
-        qDebug() << "Database initialization";
-    }
-    QObject::connect (
-        &app,
-        &QCoreApplication::aboutToQuit,
-        []() {
-            core::storage::DatabaseManager::close ();
-        }
-        );
-}
 void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
     initializedFont ();
     engine.singletonInstance<shared::localization::LanguageManager *>(
@@ -116,8 +100,6 @@ void appEngineRegister(QGuiApplication &app, QQmlApplicationEngine &engine) {
         "LanguageManager"
         );
 }
-
-
 
 
 } // namespace
@@ -129,9 +111,7 @@ int main(int argc, char *argv[])
     // QApplication consumes Qt's debugger argument during construction.
     const bool qmlPreviewSession = isQmlPreviewSession(argc, argv);
 #endif
-#ifdef Q_OS_MACOS
-    qputenv("QT_MEDIA_BACKEND", "darwin");
-#endif
+
     QQuickStyle::setStyle("Basic");
     QApplication app(argc, argv);
 
@@ -163,7 +143,7 @@ int main(int argc, char *argv[])
 
     // Container-owned QML singletons must outlive the QML engine. Local
     // variables are destroyed in reverse construction order.
-    openDBConnection (app);
+
     AppContainer app_container;
     QQmlApplicationEngine engine;
     appEngineRegister (app, engine);
@@ -195,17 +175,16 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection
     );
     engine.loadFromModule("ChatApp", "Main");
-    if (engine.rootObjects().isEmpty()) {
-        core::storage::DatabaseManager::close();
-        return EXIT_FAILURE;
-    }
+
 
 
     permissionRequest ();
 
     /// ----- QTray icon ----
     auto *window = qobject_cast<QWindow *>(engine.rootObjects ().constFirst());
+    auto &app_core = core::app::AppState::instance();
 
+    // app_core.setNotificationCount (10);
     if (!window) {
         qWarning() << "Root object it not a QWindow";
         return EXIT_FAILURE;
@@ -218,7 +197,8 @@ int main(int argc, char *argv[])
     tray.setup (window, &app);
     tray.showTrayIcon ();
     tray.setTooltip (QStringLiteral ("ChatApp"));
-    tray.updateIcon ();
+    // tray.updateIcon ();
+
 
 
     tray.setQuitCallback ([&app] {
@@ -226,15 +206,22 @@ int main(int argc, char *argv[])
     });
     core::platform::PlatformMenu appMenu;
     appMenu.setup();
+    appMenu.setQuiteCallback ([&app] {
+        app.quit ();
+        qDebug() << "App request to quit";
+    });
 
     core::platform::PlaformNotification notifcation;
     notifcation.requestPermission ();
+    // notifcation.show ("Hello", "test");
 
     QObject::connect (
         app_container.home_chat,
         &HomeChatVM::messageReceived,
-        [&notifcation](const domain::entity::MessageItem &payload) {
-            notifcation.show ("Hello", "test");
+        [&notifcation, &app_core, &tray](const domain::entity::MessageItem &payload) {
+            notifcation.show (payload.sender_id, payload.body.content.text);
+            app_core.appendNotificationCount (1);
+            tray.updateIcon ();
         }
         );
 

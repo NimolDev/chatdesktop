@@ -13,7 +13,9 @@ namespace mapping {
         .type = content.type,
         .text = content.text,
         .media_url = content.media_url,
-        .fileSize = content.file_size
+        .file_name = content.file_name,
+        .fileSize = content.file_size,
+        .duration = content.duration
     };
 }
 

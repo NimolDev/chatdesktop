@@ -15,15 +15,19 @@ enum class MessageType
     Video,
     Location,
     Image,
-    File
+    File,
+    Sticker
 };
 
 struct Content
 {
-    MessageType type;
+    MessageType type = MessageType::Text;
     QString text;
-    QString media_url;
+    QString media_url; // media file url
+    QString file_name;
     qint64 file_size = 0;
+    qint64 duration = 0; // milliseconds
+    QString localpath; // Device-only path; never included in the wire payload.
 };
 
 struct Payload

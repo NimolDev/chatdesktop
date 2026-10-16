@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../tray_icon.hpp"
+#include <atomic>
 
 namespace core {
 namespace platform  {
@@ -33,14 +34,18 @@ public:
     void addAction() override;
     void addSeperate() override;
 
+
+
     void setTooltip(const QString &tooltip) override;
     void setOpenCallback(std::__1::function<void ()> callback) override;
     void setQuitCallback(std::__1::function<void ()> callback) override;
     void setTrayClickCallback(std::function<void()> callback) override;
 
+
 private:
     class Impl;
     std::unique_ptr<Impl> d;
+    std::atomic<int> m_notificationCount{0};
 
 
 };

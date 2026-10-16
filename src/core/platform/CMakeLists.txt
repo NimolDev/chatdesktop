@@ -17,6 +17,8 @@ target_link_libraries(platform
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        core_app
+
 )
 
 target_include_directories(platform

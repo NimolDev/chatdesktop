@@ -138,6 +138,15 @@ struct LoginResponseDTO
         response.xmpp = std::move (xmpp.value ());
         return response;
     }
+    QJsonObject toJson() const
+    {
+        return {
+            {QStringLiteral("access_token"), access_token},
+            {QStringLiteral("refresh_token"), refresh_token},
+            {QStringLiteral("user"), user.toJson()},
+            {QStringLiteral("xmpp"), xmpp.toJson()}
+        };
+    }
 
     domain::entity::LoginResponse toDomain() const {
         return {

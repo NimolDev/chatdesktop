@@ -4,6 +4,7 @@
 #include <QString>
 #include <QtTypes>
 #include <QJsonObject>
+#include <QJsonArray>
 
 #include "domain/entity/messag_payload.hpp"
 // #include "page_response.hpp"
@@ -31,6 +32,8 @@ inline QString toString(MessageType type) {
         return QStringLiteral ("image");
     case MessageType::File:
         return QStringLiteral ("file");
+    case MessageType::Sticker:
+        return QStringLiteral("sticker");
     }
     return QStringLiteral ("unkknown");
 }
@@ -57,15 +60,21 @@ inline MessageType fromString(const QString &string)
     if (value == QStringLiteral("file"))
         return MessageType::File;
 
+    if (value == QStringLiteral("sticker")) {
+        return MessageType::Sticker;
+    }
+
     return MessageType::Text; // fallback
 }
 
 struct ContentDto
 {
-    MessageType type;
+    MessageType type = MessageType::Text;
     QString text;
     QString media_url;
+    QString file_name;
     qint64 fileSize = 0;
+    qint64 duration = 0;
 
     QJsonObject toJson() const
     {
@@ -73,7 +82,11 @@ struct ContentDto
         obj["type"] = toString(type);
         obj["text"] = text;
         obj["media_url"] = media_url;
+        obj["file_name"] = file_name;
         obj["fileSize"] = fileSize;
+        if (type == MessageType::Voice) {
+            obj["duration"] = duration;
+        }
         return obj;
     }
 
@@ -83,7 +96,9 @@ struct ContentDto
         c.type      = fromString (obj.value("type").toString());
         c.text      = obj.value("text").toString();
         c.media_url = obj.value("media_url").toString();
+        c.file_name = obj.value("file_name").toString();
         c.fileSize  = obj.value("fileSize").toVariant().toLongLong();
+        c.duration = obj.value("duration").toVariant().toLongLong();
         return c;
     }
 
@@ -104,7 +119,9 @@ struct ContentDto
             .type = type,
             .text = text,
             .media_url = media_url,
-            .file_size = fileSize
+            .file_name = file_name,
+            .file_size = fileSize,
+            .duration = duration
         };
     }
 
@@ -140,9 +157,13 @@ struct PayloadDto
         p.receiver_id      = obj.value("receiver_id").toString();
         p.reply_message_id = obj.value("reply_message_id").toString();
         p.timestamp         = obj.value("timestamp").toString();
-        p.content           = ContentDto::fromJson(
-            obj.value(QStringLiteral("content")).toObject(),
-            error_message);
+        const auto contentValue = obj.value(QStringLiteral("content"));
+        if (contentValue.isObject()) {
+            p.content = ContentDto::fromJson(contentValue.toObject(), error_message);
+        } else if (contentValue.isArray() && contentValue.toArray().size() == 1) {
+            // Read older single-item array payloads.
+            p.content = ContentDto::fromJson(contentValue.toArray().first().toObject(), error_message);
+        }
         return p;
     }
 
@@ -165,7 +186,15 @@ struct PayloadDto
             }
             return std::nullopt; // consider std::optional<PayloadDto> instead
         }
-        return fromJson(doc.object());
+        const auto value = doc.object().value(QStringLiteral("content"));
+        if (!value.isObject() && !(value.isArray() && value.toArray().size() == 1
+                                  && value.toArray().first().isObject())) {
+            if (error_message != nullptr) {
+                *error_message = QStringLiteral("Message content must be a single object.");
+            }
+            return std::nullopt;
+        }
+        return fromJson(doc.object(), error_message);
     }
 
     [[nodiscard]] domain::entity::Payload toDomain() const
@@ -195,15 +224,21 @@ struct MessageItemDto {
         ) {
         MessageItemDto item;
 
-        if (!object.contains ("body")
-            || !object.value ("body").isString ()) {
+        const auto bodyValue = object.value(QStringLiteral("body"));
+        if (!bodyValue.isString() && !bodyValue.isObject()) {
             if (error_message != nullptr) {
                 *error_message = "Missing or invalide: [body]";
             }
             return std::nullopt;
         }
         QString error;
-        std::optional<PayloadDto> body = PayloadDto::fromJsonString (object.value ("body").toString (), &error);
+        std::optional<PayloadDto> body;
+        if (bodyValue.isObject()) {
+            body = PayloadDto::fromJsonString(
+                QString::fromUtf8(QJsonDocument(bodyValue.toObject()).toJson(QJsonDocument::Compact)), &error);
+        } else {
+            body = PayloadDto::fromJsonString(bodyValue.toString(), &error);
+        }
         if (!body.has_value ()) {
             if (error_message != nullptr) {
                 *error_message = QStringLiteral ("Invalid [body]: %1").arg (error);
@@ -216,6 +251,17 @@ struct MessageItemDto {
         item.body = std::move (body.value ());
         item.sent_at = object.value ("sent_at").toString ();
         return item;
+    }
+
+    QJsonObject toJson() const
+    {
+        QJsonObject object;
+        object["id"] = id;
+        object["sender_id"] = sender_id;
+        object["recipient_id"] = recipient_id;
+        object["body"] = body.toJson ();
+        object["sent_at"] = sent_at;
+        return object;
     }
 
     [[nodiscard]]
@@ -237,6 +283,19 @@ struct MessageDto
     int limit;
     int total;
     int total_pages;
+
+    QJsonObject toJson() const
+    {
+        QJsonArray array;
+        for (const auto &message : messages) {
+            array.append(message.toJson());
+        }
+        return {{QStringLiteral("messages"), array},
+                {QStringLiteral("page"), page},
+                {QStringLiteral("limit"), limit},
+                {QStringLiteral("total"), total},
+                {QStringLiteral("total_pages"), total_pages}};
+    }
 
     static std::optional<MessageDto> fromJson(
         const QJsonObject &object,

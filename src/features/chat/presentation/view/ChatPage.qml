@@ -5,6 +5,7 @@ import QtQuick.Layouts
 
 import Theme
 import Features.Chat
+import "components" as Components
 
 Page {
     id: chatPage
@@ -14,12 +15,47 @@ Page {
     implicitWidth: AppLayouts.minWidth
     // anchors.fill: parent
 
+    property bool isShowEmojiSide: false
     property bool isCollapsed: false
     property string receiverId
     property string selectUserName
 
     signal resetMessagingStateRequested
     signal needScrollToLast
+
+
+    function closeEmojiSide() {
+        if (!isShowEmojiSide) {
+            return
+        }
+        isShowEmojiSide = false
+        if (Window.window) {
+            Window.window.width -= rigthSideContainer.width
+        }
+    }
+
+    function toggleEmojiSide() {
+        if (isShowEmojiSide) {
+            closeEmojiSide()
+            return
+        }
+        const window = Window.window
+        if (!window || window.width <= AppLayouts.minWidth) {
+            return
+        }
+        window.width += rigthSideContainer.width
+        isShowEmojiSide = true
+    }
+
+    Connections {
+        target: chatPage.Window.window
+        function onWidthChanged() {
+            if (chatPage.isShowEmojiSide
+                    && chatPage.Window.window.width <= AppLayouts.minWidth + rigthSideContainer.width) {
+                chatPage.isShowEmojiSide = false
+            }
+        }
+    }
 
     function showConversation(index, userName, userId) {
         const switchId = ++d.switchId
@@ -33,7 +69,7 @@ Page {
             d.itemSelectedIndex = index
             chatPage.receiverId = userId
             chatPage.selectUserName = userName
-            loaderMessage.opacity = 1
+            loaderMessage.opacity = 0
             loaderMessage.x = 0
             MessagingViewModel.fetchMessage(userId)
 
@@ -88,7 +124,6 @@ Page {
 
     onVisibleChanged: {
         if (visible) {
-            console.log("ChatPage Visible");
             ConversationsVM.fetchConversations();
         }
     }
@@ -109,7 +144,8 @@ Page {
         readonly property int collapseThreshold: minimumExpandedWidth
         readonly property int expandPullDistance: 30
         readonly property int messageMinimumWidth: 300
-        readonly property int maximumSidebarWidth: Math.max(minimumExpandedWidth, chatPage.width - messageMinimumWidth)
+        readonly property int maximumSidebarWidth: Math.max(minimumExpandedWidth, chatPage.width - messageMinimumWidth
+                                                            - (chatPage.isShowEmojiSide ? rigthSideContainer.width : 0))
 
         property real sidebarWidth: minimumExpandedWidth
         property real expandedWidth: minimumExpandedWidth
@@ -145,8 +181,14 @@ Page {
     }
     Component {
         id: conversationList
+
         ListUser {
             id: userList
+            property int selectedIndex: -1
+            property string userName : ""
+            property string userId: ""
+
+            previousIndex: d.itemSelectedIndex
             itemHeight: d.userItemHeight
             padding: AppLayouts.s_padding
             isCompactMode: width < d.minimumExpandedWidth
@@ -156,10 +198,129 @@ Page {
                 if (index === d.itemSelectedIndex) {
                     return
                 }
+                userList.selectedIndex = index
+                userList.userName = userName
+                userList.userId = userId
+                if (MessagingViewModel.voiceController.isVoiceRecording || MessagingViewModel.voiceController.isVoiceRecordingPaused) {
+                    alertPopup.open()
+                    return;
+                }
+                d.itemSelectedIndex = index
                 chatPage.showConversation(index, userName, userId)
+            }
+            Connections {
+                target: alertPopup
+
+                function onDiscardRequested() {
+                    d.itemSelectedIndex = userList.selectedIndex
+                    chatPage.showConversation(userList.selectedIndex, userList.userName, userList.userId)
+                }
+            }
+        }
+
+    }
+
+    Popup {
+        id: alertPopup
+
+        anchors.centerIn: parent
+        width: 320
+
+        padding: 16
+        modal: true
+        focus: true
+
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        signal discardRequested()
+
+        background: Rectangle {
+            radius: 12
+            color: Colors.suface1
+            border.width: 1
+            border.color: Colors.suface3
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 20
+
+            Text {
+                Layout.fillWidth: true
+
+                text: "Please stop or discard your voice recording before switching conversations."
+                wrapMode: Text.WordWrap
+
+                color: Colors.textPrimary
+                font.family: Typography.family
+                font.pixelSize: Typography.title4
+                font.weight: Typography.regular
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                spacing: 4
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    id: cancelButton
+                    Layout.preferredHeight: 36
+
+                    contentItem: Text {
+                        text: "Cancel"
+                        color: Colors.textPrimary
+                        font.family: Typography.family
+
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 6
+                        color: cancelButton.pressed
+                               ? Colors.suface3
+                               : cancelButton.hovered
+                                 ? Colors.suface2
+                                 : "transparent"
+                    }
+
+                    onClicked: alertPopup.close()
+                }
+
+                Button {
+                    id: discardButton
+                    Layout.preferredHeight: 36
+
+                    contentItem: Text {
+                        text: "Discard"
+                        color: Colors.error
+                        font.family: Typography.family
+
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 6
+                        color: discardButton.pressed
+                               ? Colors.suface3
+                               : discardButton.hovered
+                                 ? Colors.suface2
+                                 : "transparent"
+                    }
+
+                    onClicked: {
+                        alertPopup.close()
+                        alertPopup.discardRequested()
+                    }
+                }
             }
         }
     }
+
     Component {
         id: conversationLoading
         Rectangle {
@@ -175,7 +336,6 @@ Page {
             }
         }
     }
-    // <<<<<< conversation
 
     // -- Split Handle ---
     Rectangle {
@@ -246,6 +406,7 @@ Page {
             d.sidebarWidth = d.maximumSidebarWidth;
     }
 
+
     // -- Messaging Loader
     StackLayout {
         id: messageLoader
@@ -253,7 +414,7 @@ Page {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: splitHandle.right
-        anchors.right: parent.right
+        anchors.right: chatPage.isShowEmojiSide ? rigthSideContainer.left : parent.right
 
         currentIndex: d.itemSelectedIndex != -1 ? 1 : 0
 
@@ -265,15 +426,18 @@ Page {
         Loader {
             id: loaderMessage
 
-
+            opacity: 0
             active: d.itemSelectedIndex !== -1
             sourceComponent: Component {
                 ListMessaging {
                     id: messagingView
 
                     // anchors.fill: parent
-                    model: MessagingViewModel
+                    isShowEmojiSide: chatPage.isShowEmojiSide
+                    onEmojiSideToggleRequested: chatPage.toggleEmojiSide()
+                    viewmodel: MessagingViewModel
                     userName: chatPage.selectUserName
+                    onConversationReady: incomingReveal.restart()
                     onCallRequested: {
                         if (chatPage.receiverId) {
                             MessagingViewModel.requestCall(chatPage.receiverId, chatPage.selectUserName)
@@ -305,6 +469,14 @@ Page {
 
     }
 
+    Components.RigthSideContainer {
+        id: rigthSideContainer
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        isShow: chatPage.isShowEmojiSide
+    }
+
     Image {
         id: transitionSnapshot
 
@@ -315,24 +487,16 @@ Page {
         z: 10
     }
 
-    Connections {
-        target: MessagingViewModel
-
-        function onIsLoadingChanged() {
-            if (MessagingViewModel.isLoading || !transitionSnapshot.visible)
-                return
-
-            // Let ListView instantiate and position the incoming delegates
-            // before removing the frozen outgoing conversation.
-            Qt.callLater(function() {
-                chatPage.needScrollToLast()
-                incomingReveal.restart()
-            })
-        }
-    }
-
     ParallelAnimation {
         id: incomingReveal
+
+        NumberAnimation {
+            target: loaderMessage
+            property: "opacity"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
 
         NumberAnimation {
             target: transitionSnapshot

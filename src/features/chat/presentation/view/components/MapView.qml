@@ -16,7 +16,6 @@ Window {
     minimumWidth: width
     minimumHeight: height
 
-    modality: Qt.ApplicationModal
     flags: Qt.Window | Qt.FramelessWindowHint
     visible: false
 

@@ -3,11 +3,17 @@
 
 #include <QAbstractListModel>
 #include <QObject>
+#include <QFutureWatcher>
 #include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
 
 #include "domain/usecase/message_usecase.hpp"
 #include "domain/usecase/send_message_usecase.hpp"
+#include "voice_message_controller.hpp"
+#include "domain/repository/media_repository.hpp"
+#include "attachment_model.hpp"
+// #include "domain/entity/attachment_item.hpp"
+// #include "domain/entity/attachment_item.hpp"
 
 class MessagingViewModel : public QAbstractListModel
 {
@@ -23,18 +29,48 @@ public:
         RecipientIdRole,
         BodyRole,
         SentAtRole,
+        MsgType,
         SectionRole,
+        SeenRole,
+        FilePathRole,
+        DurationRole,
+        FileSizeRole,
+        ContentsRole,
+        UploadProgressRole,
+        IsUploadingRole,
+        DownloadProgressRole,
+        IsDownloadingRole,
+        DownloadedFileRole,
+        DownloadErrorRole,
     };
+
     explicit MessagingViewModel(
         std::shared_ptr<domain::usecase::MessageUsecase> usecase,
         std::shared_ptr<domain::usecase::SendMessageUsecase> msg_usecase,
-        QObject *parent = nullptr
+        QObject *parent = nullptr,
+        std::shared_ptr<domain::repository::MediaRepository> mediaRepository = {}
         );
+
+    ~MessagingViewModel() override;
 
     static MessagingViewModel *create(QQmlEngine *engine, QJSEngine *scriptEngine);
     static void setInstance(MessagingViewModel *instance);
 
+
     Q_PROPERTY(bool isLoading READ isLoading WRITE setIsLoading NOTIFY isLoadingChanged FINAL)
+
+    Q_PROPERTY(VoiceMessageController *voiceController READ voiceController CONSTANT)
+    VoiceMessageController *voiceController() { return &m_voiceController; }
+
+    Q_PROPERTY(AttachmentModel *attachmentModel READ attachmentModel CONSTANT )
+    AttachmentModel *attachmentModel() { return m_attachmentModel; }
+
+    Q_PROPERTY(bool isUploadingAttachments READ isUploadingAttachments NOTIFY attachmentUploadChanged)
+    Q_PROPERTY(bool isCancelingAttachmentUpload READ isCancelingAttachmentUpload NOTIFY attachmentUploadChanged)
+    Q_PROPERTY(QString attachmentUploadError READ attachmentUploadError NOTIFY attachmentUploadChanged)
+    Q_PROPERTY(bool isSendingVoice READ isSendingVoice NOTIFY isSendingVoiceChanged)
+    Q_PROPERTY(QString voiceSendError READ voiceSendError NOTIFY voiceSendErrorChanged)
+    Q_PROPERTY(QStringList imageUrls READ imageUrls  NOTIFY imageUrlsChanged FINAL)
 
     Q_INVOKABLE void fetchMessage(QString user_id);
     Q_INVOKABLE void fetchNextMessage();
@@ -42,7 +78,26 @@ public:
     Q_INVOKABLE void sendMessage(const QString &receiver_id, const QString &msg);
     Q_INVOKABLE void deleteMessage(QList<int> rows);
     Q_INVOKABLE void requestCall(const QString &receiverId, const QString &userName);
+    Q_INVOKABLE void sendImage(const QString &caption);
+    Q_INVOKABLE void sendFile( const QString &caption);
+    Q_INVOKABLE void sendVoice(qint64 duration);
+    Q_INVOKABLE void cancelAttachmentUpload();
+    Q_INVOKABLE void downloadFile(const QString &messageId, int contentIndex = 0);
+    Q_INVOKABLE void cancelFileDownload(const QString &messageId, int contentIndex = 0);
+    Q_INVOKABLE void cancelFileUpload(const QString &messageId, int contentIndex = 0);
 
+    Q_INVOKABLE QVariantMap createAttachment(const QUrl &url, bool compress);
+    Q_INVOKABLE void addAttachments(const QList<QUrl> &urls);
+    Q_INVOKABLE void resetAttachments();
+    Q_INVOKABLE void getImageList();
+
+    bool isUploadingAttachments() const { return m_attachmentWatcher != nullptr; }
+    bool isCancelingAttachmentUpload() const { return m_cancelingAttachmentUpload; }
+    QString attachmentUploadError() const { return m_attachmentUploadError; }
+
+    bool isSendingVoice() const { return m_isSendingVoice; }
+    QString voiceSendError() const { return m_voiceSendError; }
+    QStringList imageUrls();
 
 public:
     int rowCount(const QModelIndex &parent = QModelIndex ()) const override;
@@ -51,14 +106,53 @@ public:
 
     bool isLoading() const;
 
+
 signals:
+    void attachmentUploadChanged();
+    void attachmentUploadFinished(bool success);
+    void isSendingVoiceChanged();
+    void voiceSendErrorChanged();
+    void voiceMessageSent();
+    void voiceSendFailed(const QString &message);
     void callRequested(const QString &receiverId, const QString &userName);
     void isLoadingChanged();
     void messageChanged();
     void initialMessagesLoaded();
     void olderMessagesLoaded(int insertedCount);
+    void imageUrlsChanged();
 
 private:
+    struct FileDownloadState {
+        QString messageId;
+        double progress = 0;
+        bool downloading = false;
+        QUrl localFile;
+        QString error;
+    };
+    void notifyFileDownload(const QString &transferId);
+    std::shared_ptr<domain::repository::MediaRepository> m_mediaRepository;
+    QHash<QString, FileDownloadState> m_fileDownloads;
+
+    void setUploadProgress(const QString &id, double progress, bool uploading);
+    void removeCanceledUpload(const QString &id);
+    struct FileUploadState {
+        QString messageId;
+        int contentIndex = 0;
+        double progress = 0;
+        bool uploading = false;
+        bool canceled = false;
+    };
+    QHash<QString, FileUploadState> m_fileUploads;
+
+    void startAttachmentUpload(
+        const QList<domain::AttachmentItem> &attachments,
+        const QString &caption, bool images
+        );
+    QFutureWatcher<QString> *m_attachmentWatcher = nullptr;
+    domain::repository::UploadCancellationPtr m_attachmentCancellation;
+    bool m_cancelingAttachmentUpload = false;
+    QString m_attachmentUploadError;
+
     void applyFetchedMessages(domain::entity::MessageResponse messages,
                               quint64 requestId);
     QString sectionForDate(const QString &sentAt) const;
@@ -76,11 +170,18 @@ private:
     QList<QString> m_displayDates;
     QList<QString> m_sections;
 
+
     QString m_activeConversationId;
     quint64 m_fetchRequestId = 0;
+    VoiceMessageController m_voiceController;
+    AttachmentModel *m_attachmentModel;
 
 private:
     bool m_loading = false;
+    bool m_isSendingVoice = false;
+    bool m_sendVoiceWhenReady = false;
+    QString m_voiceSendError;
+    QStringList m_imageUrls;
 
 };
 

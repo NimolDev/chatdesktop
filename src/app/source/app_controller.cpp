@@ -2,7 +2,7 @@
 
 #include <QDebug>
 
-#include "storage/database_helper.hpp"
+#include "storage/user_data.hpp"
 
 AppController *AppController::s_instance = nullptr;
 
@@ -47,11 +47,9 @@ AppController::AppController(
             qDebug() << "Session" << session;
             if (session) {
                 setState (AppState::Authenticated);
-                auto result = core::storage::DatabaseHelper::getCurrentUser ();
-                QString user_name = result.value (0).toString ();
-                QString id = result.value (1).toString ();
-                qDebug() << "User Name:"<<user_name;
-                setUserName(user_name);
+                const auto user = core::storage::UserData::getCurrentUser();
+                QString username = user ? user->username : QString{};
+                setUserName(username);
             } else {
                 setState (AppState::Unauthenticated);
             }

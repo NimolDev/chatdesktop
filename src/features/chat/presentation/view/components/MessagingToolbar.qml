@@ -42,6 +42,10 @@ ToolBar {
         clip: true
 
         anchors.fill: parent
+        anchors {
+            leftMargin: AppLayouts.x_padding
+            rightMargin: AppLayouts.x_padding
+        }
 
         Loader {
             id: normalContent
@@ -124,17 +128,17 @@ ToolBar {
                     hoverColor: Colors.primaryHover
                     onClicked: root.audioClicked()
                 }
-                CircleButton {
-                    id: btnVideo
-                    Layout.preferredHeight: 40
-                    Layout.preferredWidth: height
-                    padding: 8
-                    iconSource: AppAssets.icVideo
-                    borderColor: Colors.suface3
-                    tintColor: Colors.primary
-                    hoverColor: Colors.primaryHover
-                    onClicked: root.videoClicked()
-                }
+                // CircleButton {
+                //     id: btnVideo
+                //     Layout.preferredHeight: 40
+                //     Layout.preferredWidth: height
+                //     padding: 8
+                //     iconSource: AppAssets.icVideo
+                //     borderColor: Colors.suface3
+                //     tintColor: Colors.primary
+                //     hoverColor: Colors.primaryHover
+                //     onClicked: root.videoClicked()
+                // }
                 CircleButton {
                     id: btnMore
                     Layout.preferredHeight: 40
