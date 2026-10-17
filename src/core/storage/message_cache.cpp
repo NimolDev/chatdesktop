@@ -28,7 +28,7 @@ QDir storeDirectory() {
 
 QString fileName(const QString &logical_name, const QString &secret)
 {
-    return QStringLiteral("messages-v3-") + FileNameHelper::hexNameV2(logical_name, secret);
+    return FileNameHelper::hexName(logical_name, secret);
 }
 std::string storePassword()
 {
@@ -65,7 +65,7 @@ LocalStorage &openStore(const QString &path)
 
 std::string pageRoot(int page)
 {
-    return "message-page-" + std::to_string(page);
+    return  std::to_string(page);
 }
 
 } // namespace
@@ -128,6 +128,18 @@ bool MessageCache::savePage(const QString &objects, const QString &logical_name,
     if (page < 1) {
         return false;
     }
+    return saveSnapshot(objects, logical_name, secret_password, QString::fromStdString(pageRoot(page)));
+}
+
+bool MessageCache::savePending(const QString &objects, const QString &logical_name,
+                               const QString &secret_password)
+{
+    return saveSnapshot(objects, logical_name, secret_password, QStringLiteral("pending-messages"));
+}
+
+bool MessageCache::saveSnapshot(const QString &objects, const QString &logical_name,
+                                const QString &secret_password, const QString &root)
+{
     std::lock_guard lock(storeMutex);
     try {
         const QDir directory = storeDirectory();
@@ -136,9 +148,9 @@ bool MessageCache::savePage(const QString &objects, const QString &logical_name,
         }
         const QString file = directory.filePath(fileName(logical_name, secret_password));
         auto &storage = openStore(file);
-        const auto id = storage.root(pageRoot(page));
+        const auto id = storage.root(root.toStdString());
         if (!id) {
-            storage.setRoot(pageRoot(page), storage.insert(objects.toStdString(), kMessageTag));
+            storage.setRoot(root.toStdString(), storage.insert(objects.toStdString(), kMessageTag));
         } else if (!storage.update(*id, objects.toStdString())) {
             return false;
         }
@@ -157,6 +169,18 @@ std::optional<QString> MessageCache::readPage(const QString &logical_name,
     if (page < 1) {
         return std::nullopt;
     }
+    return readSnapshot(logical_name, secret_password, QString::fromStdString(pageRoot(page)));
+}
+
+std::optional<QString> MessageCache::readPending(const QString &logical_name,
+                                                const QString &secret_password)
+{
+    return readSnapshot(logical_name, secret_password, QStringLiteral("pending-messages"));
+}
+
+std::optional<QString> MessageCache::readSnapshot(const QString &logical_name,
+                                                 const QString &secret_password, const QString &root)
+{
     std::lock_guard lock(storeMutex);
     try {
         const QString file = storeDirectory().filePath(fileName(logical_name, secret_password));
@@ -164,7 +188,7 @@ std::optional<QString> MessageCache::readPage(const QString &logical_name,
             return std::nullopt;
         }
         auto &storage = openStore(file);
-        const auto id = storage.root(pageRoot(page));
+        const auto id = storage.root(root.toStdString());
         if (!id) {
             return std::nullopt;
         }

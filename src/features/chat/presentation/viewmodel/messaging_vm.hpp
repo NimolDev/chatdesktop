@@ -112,6 +112,7 @@ signals:
     void attachmentUploadFinished(bool success);
     void isSendingVoiceChanged();
     void voiceSendErrorChanged();
+    void voiceMessageQueued();
     void voiceMessageSent();
     void voiceSendFailed(const QString &message);
     void callRequested(const QString &receiverId, const QString &userName);

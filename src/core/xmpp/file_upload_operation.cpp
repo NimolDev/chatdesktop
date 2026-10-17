@@ -87,6 +87,11 @@ void FileUploadOperation::put(const QNetworkRequest &request, const QUrl &downlo
     if (isStopped()) {
         return;
     }
+    // Report the initial state before Qt emits its first batched byte update.
+    progress(100, m_file.size());
+    if (isStopped()) {
+        return;
+    }
     m_network.setTransferTimeout(60000);
     m_reply = m_network.put(request, &m_file);
     connect(m_reply, &QNetworkReply::uploadProgress, this,

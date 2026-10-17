@@ -11,6 +11,15 @@ Menu {
 
     padding: 6
     implicitWidth: 150
+
+
+
+
+    signal filePicker(var urls)
+    signal imageAndVideoFileSelected(var urls)
+    signal filesSelected(var urls)
+    signal locationSelected(var coordinate)
+
     background: Rectangle {
         radius: AppLayouts.x_radius
         color: Colors.suface1
@@ -56,11 +65,13 @@ Menu {
         isShowIcon: false
         onTriggered: {
             attachmentDialog.title = "Select photo or video to send"
+            const imageAndVideo = FileFormatesQml.imageAndVideo
             attachmentDialog.nameFilters = [
-                "Images (*.avif *.bmp *.gif *.heic *.heif *.jfif *.jpeg *.jpg *.jxl *.pbm *.pgm *.png *.ppm *.webp *.xbm *.xpm)",
-                "Videos (*.mp4 *.mov *.m4v)"
-            ]
+                        imageAndVideo,
+                        "All files (*)"
+                    ]
             attachmentDialog.selectedNameFilter.index = 0
+            attachmentDialog.isFileSelect = false
             attachmentDialog.open()
         }
     }
@@ -71,15 +82,10 @@ Menu {
             attachmentDialog.title = "Select file to send"
             attachmentDialog.nameFilters = [
                 "All files (*)",
-                "Documents (*.pdf *.doc *.docx *.odt *.rtf *.txt *.md)",
-                "Spreadsheets (*.xls *.xlsx *.ods *.csv *.tsv)",
-                "Presentations (*.ppt *.pptx *.odp)",
-                "Archives (*.zip *.rar *.7z *.tar *.gz *.bz2 *.xz)",
-                "Audio (*.mp3 *.wav *.m4a *.aac *.ogg *.flac *.aiff)",
-                "Images (*.avif *.bmp *.gif *.heic *.heif *.jfif *.jpeg *.jpg *.jxl *.pbm *.pgm *.png *.ppm *.webp *.xbm *.xpm)",
-                "Videos (*.mp4 *.mov *.m4v)"
+                FileFormatesQml.imageFilters
             ]
             attachmentDialog.selectedNameFilter.index = 0
+            attachmentDialog.isFileSelect = true
             attachmentDialog.open()
         }
     }
@@ -102,13 +108,21 @@ Menu {
         fileMode: FileDialog.OpenFiles
         nameFilters: ["All files (*)"]
 
+        property var isFileSelect: false
         onAccepted: {
-            // root.sele
-            console.log("select: ", selectedFile)
+            // console.log("select: ", selectedFile)
+            if (isFileSelect) {
+                root.filesSelected(selectedFiles)
+            } else {
+                root.imageAndVideoFileSelected(selectedFiles)
+            }
+
+            // root.filePicker(selectedFiles)
         }
         onRejected: {
-            console.log("Reject select file:")
+            // console.log("Reject select file:")
         }
+
     }
 
     // Do not create a hidden Window while previewing the messaging Item:

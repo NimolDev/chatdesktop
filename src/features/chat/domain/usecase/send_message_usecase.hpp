@@ -18,7 +18,7 @@ public:
         );
 
     QFuture<QString> execute(const QString &receiver_id, const QString &msg);
-    QFuture<QString> sendVoice(const QString &receiver, const QUrl &file, qint64 duration);
+    QFuture<QString> sendVoice(const QString &receiver, const QUrl &file, qint64 duration, const QString &messageId = {});
     QFuture<QString> sendImage(const QString &receiver_id, const QList<domain::AttachmentItem> &attachments, const QString &caption,
                                repository::UploadCancellationPtr cancellation = {});
     QFuture<QString> sendFiles(const QString &receiver_id, const QList<domain::AttachmentItem> &attachments, const QString &caption,

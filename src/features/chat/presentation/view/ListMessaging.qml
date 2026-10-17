@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 
 import Theme
+import Shared.UI
 import "components" as Components
 
 Item {
@@ -79,10 +80,7 @@ Item {
         messageBody.scrollToLatest()
     }
 
-    // Rectangle {
-    //     anchors.fill: parent
-    //     color: Colors.background
-    // }
+
     Image {
         id: chatBackground
         anchors {
@@ -421,6 +419,54 @@ Item {
                      }
 
         onEmojiSideToggleRequested: root.emojiSideToggleRequested()
+
+        // onFilePicker: urls => {
+
+        //                   var files = []
+        //                   for (var i = 0; i < urls.length; i++) {
+        //                       files.push({url: String(urls[i]), compress: false})
+        //                   }
+        //                   console.log("File Picker" , files[0]["compress"])
+        //                   if (root.viewmodel) {
+        //                       root.viewmodel.addAttachments(urls)
+        //                   }
+        //                   filePopup.files = filePopup.files.concat(files)
+        //                   filePopup.compress = true
+        //                   filePopup.open()
+        //                   root.filesDropped(files)
+        //               }
+
+
+
+
+        onImageAndVideoFileSelected: urls => {
+                                         var files = []
+                                         for (var i = 0; i < urls.length; i++) {
+                                             files.push({url: String(urls[i]), compress: true})
+                                         }
+                                         console.log("File Picker" , files[0]["compress"])
+                                         if (root.viewmodel) {
+                                             root.viewmodel.addAttachments(urls)
+                                         }
+                                         filePopup.files = filePopup.files.concat(files)
+                                         filePopup.compress = true
+                                         filePopup.open()
+                                         root.filesDropped(files)
+                                     }
+        onFilesSelected: urls => {
+                            var files = []
+                            for (var i = 0; i < urls.length; i++) {
+                                files.push({url: String(urls[i]), compress: false})
+                            }
+                            console.log("File Picker" , files[0]["compress"])
+                            if (root.viewmodel) {
+                                root.viewmodel.addAttachments(urls)
+                            }
+                            filePopup.files = filePopup.files.concat(files)
+                            filePopup.compress = false
+                            filePopup.open()
+                            root.filesDropped(files)
+                        }
     }
 
     Components.MessageContextMenu {
@@ -429,9 +475,13 @@ Item {
     }
 
     Components.FileDropOverlay {
-        // Share the popup layer so the drop targets can render above popups.
-        parent: root.parent
-        anchors.fill: parent
+        // Render above the modal popup, but only accept drops inside this conversation.
+        parent: Overlay.overlay
+        readonly property rect conversationFrame: root.mapToItem(parent, 0, 0, root.width, root.height)
+        x: conversationFrame.x
+        y: conversationFrame.y
+        width: conversationFrame.width
+        height: conversationFrame.height
         visible: root.visible
         enabled: root.enabled
         z: 2147483647
@@ -448,11 +498,7 @@ Item {
                             if (files.length === 0 || fileCount > 5) {
                                 return
                             }
-                            let newFiles = []
-                            for (let i = 0; i < files.length; i++) {
-                                newFiles.push(root.viewmodel.createAttachment(files[i]["url"], files[i]["compress"]))
-                                // console.log(newFiles[i].id)
-                            }
+
                             const urls = files.map(file => file.url)
                             .filter(url => url !== undefined && url !== null && url !== "")
                             if (root.viewmodel) {
@@ -465,20 +511,20 @@ Item {
                             filePopup.open()
                         }
 
-        Components.AttachmentUploadDialog {
-            id: filePopup
-            viewmodel: root.viewmodel
-            onSend: (urls, caption, compress) => {
-                        if (root.viewmodel) {
-                            if (compress) {
-                                root.viewmodel.sendImage(caption)
-                            } else {
-                                root.viewmodel.sendFile(caption)
-                            }
-                            root.viewmodel.resetAttachments()
-                        }
-                    }
-        }
+    }
 
+    Components.AttachmentUploadDialog {
+        id: filePopup
+        viewmodel: root.viewmodel
+        onSend: (urls, caption, compress) => {
+                    if (root.viewmodel) {
+                        if (compress) {
+                            root.viewmodel.sendImage(caption)
+                        } else {
+                            root.viewmodel.sendFile(caption)
+                        }
+                        root.viewmodel.resetAttachments()
+                    }
+                }
     }
 }

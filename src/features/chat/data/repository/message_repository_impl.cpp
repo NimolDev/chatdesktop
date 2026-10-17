@@ -5,11 +5,12 @@
 #include "data/dto/message_store.hpp"
 #include "media/image_compress.hpp"
 
-#include "storage/message_cache.hpp"
+#include "message_history_cache.hpp"
 #include "logging/logger.hpp"
 
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <exception>
 
 #include "storage/user_data.hpp"
 namespace data {
@@ -18,94 +19,28 @@ namespace repository {
 namespace {
 
 
-QString messageCacheSecret(const QString &account, const QString &userId)
-{
-    const QString secret = QString::fromUtf8(QJsonDocument(QJsonArray{account, userId})
-                                                .toJson(QJsonDocument::Compact));
-    return QString::fromLatin1(secret.toUtf8().toBase64());
-}
-
-void cacheMessage(const QString &account, const QString &user_id,
+bool cacheMessage(const QString &account, const QString &userId,
                   const data::dto::MessageDto &message)
 {
-    if (message.messages.empty ()) {
-        return;
-    }
-    const QString json = QString::fromUtf8(QJsonDocument(message.toJson()).toJson(QJsonDocument::Compact));
-    if (!core::storage::MessageCache::savePage(json, user_id,
-                                          messageCacheSecret(account, user_id), message.page)) {
+    if (!MessageHistoryCache::savePage(account, userId, message)) {
         LOG_WARNING("Could not cache fetched messages");
+        return false;
     }
+    return true;
 }
 
-domain::entity::MessageResponse localMessages(const QString &account, const QString &user_id, int page)
+domain::entity::MessageResponse localMessages(const QString &account, const QString &userId, int page)
 {
-    domain::entity::MessageResponse result{};
-    result.page = page;
-    const auto cache = core::storage::MessageCache::readPage(
-        user_id, messageCacheSecret(account, user_id), page);
-    if (!cache) {
-        return result;
-    }
-    QString error;
-    const auto document = core::network::JsonSerializer::parse(cache->toUtf8(), &error);
-    if (!document) {
-        LOG_WARNING(QStringLiteral("Invalid message cache JSON for page %1: %2").arg(page).arg(error));
-        return result;
-    }
-    if (!document->isObject()) {
-        LOG_WARNING("Invalid message cache response: expected a MessageDto JSON object");
-        return result;
-    }
-    auto decoded = data::dto::MessageDto::fromJson(document->object(), &error);
-    if (!decoded) {
-        LOG_WARNING(QStringLiteral("Could not decode cached response: %1").arg(error));
-        return result;
-    }
-    if (decoded->page != page) {
-        LOG_WARNING(QStringLiteral("Cached response page mismatch: requested %1, stored %2")
-                        .arg(page).arg(decoded->page));
-        return result;
-    }
-    return decoded->toDomain();
+    return MessageHistoryCache::read(account, userId, page).toDomain();
 }
 
-QString storageId(QString id)
+void persistMessage(const QString &account, const QString &conversation,
+                    const data::dto::MessageItemDto &message)
 {
-    return id.split(QLatin1Char('/')).first().split(QLatin1Char('@')).first().remove(QLatin1Char('-'));
-}
-
-void persistMessages(const QString &account, const QString &conversation,
-                     const QList<domain::entity::MessageItem> &messages)
-{
-    // QList<core::storage::StoredMessage> records;
-    // for (const auto &message : messages) {
-    //     {
-    //         const auto &content = message.body.content;
-    //         if (!content.media_url.isEmpty()) {
-    //             core::storage::MessageStore::saveMediaPath(storageId(account), content.media_url, content.localpath);
-    //         }
-    //     }
-    //     records.append({message.body.message_id.isEmpty() ? message.id : message.body.message_id,
-    //                     message.sender_id, message.recipient_id,
-    //                     data::mapping::toDto(message.body).toJsonString(), message.sent_at,
-    //                     message.body.timestamp.toLongLong()});
-    // }
-    // if (!core::storage::MessageStore::save(storageId(account), storageId(conversation), records)) {
-    //     qWarning() << "Could not persist messages locally";
-    // }
-}
-
-void restoreMediaPaths(const QString &account, domain::entity::MessageItem &message)
-{
-    {
-        auto &content = message.body.content;
-        // const auto path = core::storage::MessageStore::localMediaPath(storageId(account), content.media_url);
-        // content.localpath = QFileInfo(path).isFile() ? path : QString();
+    if (!MessageHistoryCache::saveMessage(account, conversation, message)) {
+        LOG_WARNING("Could not cache message");
     }
 }
-
-
 
 } // namespace
 
@@ -142,55 +77,134 @@ MessageRepositoryImpl::MessageRepositoryImpl(
             );
 }
 
-QFuture<domain::entity::MessageResponse> MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
+QFuture<domain::entity::MessageResponse>
+MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
 {
-    QUrlQuery query;
-    query.addQueryItem (QStringLiteral ("limit"), "200");
-    query.addQueryItem (QStringLiteral ("page"), QString::number (page));
+    using MessageResponse = domain::entity::MessageResponse;
+
+    auto promise = std::make_shared<QPromise<MessageResponse>>();
+    promise->start();
+
+    auto future = promise->future();
+
+    if (page < 1) {
+        promise->finish();
+        return future;
+    }
 
     const QString account = currentUserId();
-    auto cache = localMessages (account, user_id, 0);
-    qDebug() << "Cache: " << cache.messages.count ();
-    return m_network ->get (core::constants::AppConstants::messages (user_id), query)
-        .then(QtFuture::Launch::Async,
-              [account, user_id, page](const core::network::NetworkResponse &response)
-                  -> domain::entity::MessageResponse {
-            if (!response.isSuccess ()) {
-                qWarning() << "Message request failed, status:"<<response.status_code;
-                return localMessages(account, user_id, page);
+
+    MessageResponse cache{};
+
+    // 1. Load cache only for page 1
+    if (page == 1) {
+        cache = localMessages(account, user_id, page);
+
+        if (!cache.messages.isEmpty()) {
+            qDebug() << "Loaded cached messages";
+            promise->addResult(cache);
+        }
+    }
+
+    // 2. Prepare request
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("limit"), QStringLiteral("200"));
+    query.addQueryItem(QStringLiteral("page"), QString::number(page));
+
+    // 3. Request server
+    m_network->get(
+                 core::constants::AppConstants::messages(user_id),
+                 query
+                 )
+        .then(
+            QtFuture::Launch::Async,
+            [promise, page, cache, account, user_id]
+            (const core::network::NetworkResponse& response) {
+
+                if (!response.isSuccess()) {
+                    qWarning() << "Message request failed:"
+                               << response.status_code;
+
+                    promise->finish();
+                    return;
+                }
+
+                QString error;
+
+                const auto document =
+                    core::network::JsonSerializer::parse(
+                        response.body,
+                        &error
+                        );
+
+                if (!document || !document->isObject()) {
+                    qWarning() << "Message parse error:" << error;
+
+                    promise->finish();
+                    return;
+                }
+
+                auto dto =
+                    core::network::JsonSerializer::fromObject<
+                        data::dto::MessageDto
+                        >(
+                        document->object(),
+                        &error
+                        );
+
+                if (!dto) {
+                    qWarning() << "Message mapping error:" << error;
+
+                    promise->finish();
+                    return;
+                }
+
+                if (dto->page != page) {
+                    qWarning() << "Message response page mismatch";
+
+                    promise->finish();
+                    return;
+                }
+
+                // 4. Handle empty server result
+                if (dto->messages.isEmpty()) {
+                    if (cache.messages.isEmpty()) {
+                        promise->addResult(MessageResponse{});
+                    }
+
+                    promise->finish();
+                    return;
+                }
+
+                // 5. Convert server response
+                MessageResponse server = dto->toDomain();
+
+                if (page == 1) {
+                    const bool shouldUpdate =
+                        cache.messages.isEmpty() ||
+                        server.messages.last().sent_at >
+                            cache.messages.last().sent_at;
+
+                    if (shouldUpdate) {
+                        qDebug() << " =====> Update message: <======";
+                        promise->addResult(server);
+                        cacheMessage (account, user_id, dto.value ());
+                    }
+
+                }
+                else {
+                    promise->addResult(server);
+                }
+                promise->finish();
             }
+            );
 
-            QString error;
-            auto document = core::network::JsonSerializer::parse (response.body, &error);
-            if (!document.has_value ()) {
-                qWarning() << "Message pares error: "<<error;
-                 return localMessages(account, user_id, page);
-            }
-
-            auto d = core::network::JsonSerializer::fromObject<data::dto::MessageDto> (document->object (), &error);
-            if (!d.has_value ()) {
-                qWarning() << "Message mapping error: "<< error;
-                  return localMessages(account, user_id, page);
-            }
-
-            auto domain = d->toDomain ();
-
-
-            // persistMessages(account, user_id, domain.messages);
-            // for (auto &message : domain.messages) {
-            //     restoreMediaPaths(account, message);
-            // }
-
-            cacheMessage(account, user_id, d.value());
-            return domain;
-        });
+    return future;
 }
 
- QFuture<QString> MessageRepositoryImpl::sendMessage(domain::entity::Payload &payload)
+QFuture<QString> MessageRepositoryImpl::sendMessage(domain::entity::Payload &payload)
 {
-    const QString current_userid = currentUserId ();
     auto dto = data::mapping::toDto (payload);
-    QString jsonString = dto.toJsonString ();
     dto::MessageItemDto msgDto;
     msgDto.id = dto.message_id;
     msgDto.sender_id = dto.sender_id;
@@ -198,10 +212,17 @@ QFuture<domain::entity::MessageResponse> MessageRepositoryImpl::fetchMessageById
     msgDto.body = std::move (dto);
 
     emit messageSent(msgDto.toDomain ());
-    // const QString message_id = QUuid::createUuid ().toString (QUuid::WithoutBraces);
+    return enqueue([this, payload] {
+        return sendMessageNow(payload);
+    });
+}
+
+QFuture<QString> MessageRepositoryImpl::sendMessageNow(domain::entity::Payload payload)
+{
+    const QString jsonString = data::mapping::toDto(payload).toJsonString();
     return m_xmpp->sendMessage (payload.receiver_id, jsonString,payload.message_id)
        .then(this,
-             [this, payload,&dto, jsonString](QString error) mutable {
+             [this, payload, jsonString](QString error) mutable {
                   if (error.isEmpty ()) {
                       saveMessage (payload.receiver_id, jsonString);
                   }
@@ -213,18 +234,10 @@ QFuture<QString> MessageRepositoryImpl::sendVoice(
     domain::entity::Payload &payload,
     const QUrl &file)
 {
-
-    return m_xmpp->fileUpload(payload.message_id,file.toString ())
-        .then(
-            this,
-            [this, payload](const core::xmpp::UploadedFile &upload) mutable {
-                if (!upload.error.isEmpty()) {
-                    return QtFuture::makeReadyValueFuture(upload.error);
-                }
-                payload.content.media_url = upload.url.toString(QUrl::FullyEncoded);
-                 const QString message_id = QUuid::createUuid ().toString (QUuid::WithoutBraces);
-                return sendMessage (payload);
-            }).unwrap();
+    domain::AttachmentItem attachment;
+    attachment.id = payload.message_id;
+    attachment.url = file;
+    return sendFiles(payload, attachment);
 }
 
 QFuture<QString> MessageRepositoryImpl::sendImage(
@@ -235,103 +248,113 @@ QFuture<QString> MessageRepositoryImpl::sendImage(
     if (attachments.size() != 1) {
         return QtFuture::makeReadyValueFuture(QStringLiteral("Image files and message content do not match."));
     }
-
-    using domain::repository::UploadCancellation;
-    if (cancellation && cancellation->isCanceled()) {
-        return UploadCancellation::canceledFuture<QString>();
-    }
-    auto cachedFiles = QtFuture::makeReadyValueFuture(QStringList{});
-    for (qsizetype index = 0; index < attachments.size(); ++index) {
-        const QString cacheId = payload.message_id + QStringLiteral("-%1").arg(index);
-        cachedFiles = cachedFiles.then(this,
-            [input = attachments[index], cacheId, cancellation](QStringList paths) {
-                if (cancellation && cancellation->isCanceled()) {
-                    return UploadCancellation::canceledFuture<QStringList>();
-                }
-                auto compressed = core::media::ImageCompress::compressImageToCache(input.url.toString (), cacheId);
-                if (cancellation) {
-                    cancellation->track(compressed);
-                }
-                return compressed.then([paths](const QString &path) mutable {
-                        paths.append(path);
-                        return paths;
-                    });
-            }).unwrap();
-    }
-
-    return cachedFiles.then(this, [this, payload, cancellation](const QStringList &paths) mutable {
-        if (cancellation && cancellation->isCanceled()) {
-            return UploadCancellation::canceledFuture<QString>();
-        }
-        QStringList uploadUrls;
-        for (qsizetype index = 0; index < paths.size(); ++index) {
-            if (paths[index].isEmpty()) {
-                return QtFuture::makeReadyValueFuture(
-                    QStringLiteral("Could not compress image %1. No message was sent.").arg(index + 1));
-            }
-            payload.content.file_size = QFileInfo(paths[index]).size();
-            uploadUrls.append(QUrl::fromLocalFile(paths[index]).toString(QUrl::FullyEncoded));
-        }
-        auto uploading = m_xmpp->fileUploads(payload.message_id,uploadUrls);
-        if (cancellation) {
-            cancellation->track(uploading);
-        }
-        return uploading.then(this, [this, payload, cancellation](const QList<core::xmpp::UploadedFile> &uploads) mutable {
-                if (uploads.size() != 1) {
-                    return QtFuture::makeReadyValueFuture(QStringLiteral("Incomplete image upload results."));
-                }
-                for (qsizetype index = 0; index < uploads.size(); ++index) {
-                    if (!uploads[index].error.isEmpty()) {
-                        return QtFuture::makeReadyValueFuture(uploads[index].error);
-                    }
-                    payload.content.media_url = uploads[index].url.toString(QUrl::FullyEncoded);
-                }
-                if (cancellation && !cancellation->tryCommit()) {
-                    return UploadCancellation::canceledFuture<QString>();
-                }
-                return sendMessage(payload);
-            }).unwrap();
-    }).unwrap();
+    return sendFiles(payload, attachments.first(), cancellation);
 }
 
 QFuture<QString> MessageRepositoryImpl::sendFile(
     domain::entity::Payload &payload,
     const QUrl &file)
 {
-    // if (payload.content.isEmpty()) {
-    //     return QtFuture::makeReadyValueFuture(QStringLiteral("Message content is empty."));
-    // }
-
-    // return m_xmpp->fileUpload (file.toString ())
-    // .then (this,
-    //       [this, payload](const core::xmpp::UploadedFile &upload) mutable {
-    //           if (!upload.error.isEmpty ()) {
-    //               return QtFuture::makeReadyValueFuture (upload.error);
-    //           }
-    //           payload.content.media_url = upload.url.toString (QUrl::FullyEncoded);
-    //           return sendMessage(payload);
-    //       }).unwrap ();
 
     return QtFuture::makeReadyValueFuture (QStringLiteral (""));
 }
 
+QFuture<QString> MessageRepositoryImpl::enqueue(
+    std::function<QFuture<QString>()> start,
+    domain::repository::UploadCancellationPtr cancellation,
+    std::shared_ptr<FileUploadTask> task)
+{
+    auto promise = std::make_shared<QPromise<QString>>();
+    promise->start();
+    auto future = promise->future();
+    if (cancellation) {
+        cancellation->track(future);
+    }
+    m_queue.enqueue({std::move(start), cancellation, task, promise});
+    nextProcess();
+    return future;
+}
+
+void MessageRepositoryImpl::nextProcess()
+{
+    if (m_processing || m_queue.isEmpty()) {
+        return;
+    }
+    // Skip canceled entries without starting a network upload.
+    while (!m_queue.isEmpty() && m_queue.head().cancellation && m_queue.head().cancellation->isCanceled()) {
+        const auto upload = m_queue.dequeue();
+        if (upload.task) {
+            m_uploadTasks.remove(upload.task->id);
+        }
+        upload.promise->finish();
+    }
+    if (m_queue.isEmpty()) {
+        return;
+    }
+
+    m_processing = true;
+    auto upload = m_queue.dequeue();
+    QFuture<QString> sending;
+    try {
+        sending = upload.start();
+    } catch (...) {
+        upload.promise->setException(std::current_exception());
+        upload.promise->finish();
+        if (upload.task) {
+            m_uploadTasks.remove(upload.task->id);
+        }
+        m_processing = false;
+        QMetaObject::invokeMethod(this, [this] { nextProcess(); }, Qt::QueuedConnection);
+        return;
+    }
+
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this,
+            [this, watcher, upload] {
+        const auto future = watcher->future();
+        if (future.isCanceled()) {
+            upload.promise->future().cancel();
+        } else {
+            try {
+                if (future.resultCount() > 0) {
+                    upload.promise->addResult(future.result());
+                }
+            } catch (...) {
+                upload.promise->setException(std::current_exception());
+            }
+        }
+        upload.promise->finish();
+        if (upload.task) {
+            m_uploadTasks.remove(upload.task->id);
+        }
+        watcher->deleteLater();
+        m_processing = false;
+        nextProcess();
+    });
+    watcher->setFuture(sending);
+
+}
+
 QFuture<QString> MessageRepositoryImpl::sendFiles(
     domain::entity::Payload &payload,
-    const QList<domain::AttachmentItem> &attachments,
+    const domain::AttachmentItem &attachment,
     domain::repository::UploadCancellationPtr cancellation)
 {
     using domain::repository::UploadCancellation;
-    if (attachments.size() != 1) {
-        return QtFuture::makeReadyValueFuture(QStringLiteral("Each message must contain one file."));
-    }
+
     if (cancellation && cancellation->isCanceled()) {
         return UploadCancellation::canceledFuture<QString>();
     }
-    const auto &attachment = attachments.first();
+
+    if (m_uploadTasks.contains(attachment.id)) {
+        return QtFuture::makeReadyValueFuture(QStringLiteral("File upload is already queued or in progress."));
+    }
+
     const QFileInfo info(attachment.url.toLocalFile());
     if (!attachment.url.isLocalFile() || !info.isFile() || !info.isReadable() || info.size() <= 0) {
         return QtFuture::makeReadyValueFuture(QStringLiteral("File is missing, empty, or unreadable."));
     }
+
     auto message = payload;
     message.content.file_name = info.fileName();
     message.content.file_size = info.size();
@@ -346,38 +369,47 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
     task->id = attachment.id;
     task->file_path = attachment.url.toString();
     task->cancellation = cancellation ? cancellation : std::make_shared<UploadCancellation>();
-    task->future = task->cancellation->track(m_xmpp->fileUpload(task->id, task->file_path));
     m_uploadTasks.insert(task->id, task);
     emit fileUploadStated(task->id, task->file_path);
+    return enqueue([this, message, task]() mutable {
+        auto prepared = QtFuture::makeReadyValueFuture(task->file_path);
+        if (message.content.type == domain::entity::MessageType::Image) {
+            prepared = task->cancellation->track(
+                core::media::ImageCompress::compressImageToCache(
+                    task->file_path, message.message_id + QStringLiteral("-0")))
+                .then([](const QString &path) {
+                    return path.isEmpty() ? QString{} : QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
+                });
+        }
+        return prepared.then(this, [this, message, task](const QString &path) mutable {
+            if (task->cancellation->isCanceled()) {
+                return UploadCancellation::canceledFuture<QString>();
+            }
+            if (path.isEmpty()) {
+                return QtFuture::makeReadyValueFuture(
+                    QStringLiteral("Could not compress image. No message was sent."));
+            }
+            task->file_path = path;
+            message.content.file_size = QFileInfo(QUrl(path).toLocalFile()).size();
+            task->future = task->cancellation->track(m_xmpp->fileUpload(task->id, task->file_path));
 
-    auto *watcher = new QFutureWatcher<core::xmpp::UploadedFile>(this);
-    connect(watcher, &QFutureWatcher<core::xmpp::UploadedFile>::finished, this, [this, watcher, task] {
-        m_uploadTasks.remove(task->id);
-        watcher->deleteLater();
-    });
-    watcher->setFuture(task->future);
-    return task->future.then(this, [this, message, task](const core::xmpp::UploadedFile &upload) mutable {
-        if (!upload.error.isEmpty()) {
-            return QtFuture::makeReadyValueFuture(upload.error);
-        }
-        if (!upload.url.isValid() || upload.url.isEmpty()) {
-            return QtFuture::makeReadyValueFuture(QStringLiteral("File upload returned an invalid URL."));
-        }
-        if (!task->cancellation->tryCommit()) {
-            return UploadCancellation::canceledFuture<QString>();
-        }
-        message.content.media_url = upload.url.toString(QUrl::FullyEncoded);
-        const QString json = data::mapping::toDto(message).toJsonString();
-        return m_xmpp->sendMessage(message.receiver_id, json, message.message_id)
-            .then(this, [this, message, json](QString error) {
-                if (error.isEmpty()) {
-                    saveMessage(message.receiver_id, json);
+
+            return task->future.then(this, [this, message, task](const core::xmpp::UploadedFile &upload) mutable {
+                if (!upload.error.isEmpty()) {
+                    return QtFuture::makeReadyValueFuture(upload.error);
                 }
-                return error;
-            });
-    }).unwrap();
+                if (!upload.url.isValid() || upload.url.isEmpty()) {
+                    return QtFuture::makeReadyValueFuture(QStringLiteral("File upload returned an invalid URL."));
+                }
+                if (!task->cancellation->tryCommit()) {
+                    return UploadCancellation::canceledFuture<QString>();
+                }
+                message.content.media_url = upload.url.toString(QUrl::FullyEncoded);
+                return sendMessageNow(message);
+            }).unwrap();
+        }).unwrap();
+    }, task->cancellation, task);
 }
-
 
 QFuture<bool> MessageRepositoryImpl::cancelFileUpload(const QString &upload_id)
 {
@@ -396,6 +428,8 @@ QFuture<bool> MessageRepositoryImpl::cancelFileUpload(const QString &upload_id)
     return QtFuture::makeReadyValueFuture (result);
 
 }
+
+
 QString MessageRepositoryImpl::currentUserId() const
 {
     const QString id = m_xmpp->currentJid().split(QLatin1Char('@')).first();
@@ -411,9 +445,12 @@ void MessageRepositoryImpl::saveMessage(QString receiver_id, QString body)
 {
     const auto payload = dto::PayloadDto::fromJsonString(body);
     if (payload) {
-        persistMessages(currentUserId(), receiver_id,
-                        {{payload->message_id, payload->sender_id, payload->receiver_id,
-                          payload->toDomain(), QString(), true}});
+        dto::MessageItemDto message{};
+        message.id = payload->message_id;
+        message.sender_id = payload->sender_id;
+        message.recipient_id = payload->receiver_id;
+        message.body = *payload;
+        persistMessage(currentUserId(), receiver_id, message);
     }
     dto::MesssageStore message;
 
@@ -422,9 +459,9 @@ void MessageRepositoryImpl::saveMessage(QString receiver_id, QString body)
 
     QJsonObject request = message.toJson ();
     m_network->post (core::constants::AppConstants::saveMessages (), request)
-        .then ([this](const core::network::NetworkResponse &response) {
+        .then ([](const core::network::NetworkResponse &response) {
             if (!response.isSuccess ()) {
-                qWarning() << "Login request failed, status:" << response.status_code;
+                qWarning() << "Save message request failed, status:" << response.status_code;
                 return;
             }
             QString error;
@@ -437,7 +474,6 @@ void MessageRepositoryImpl::saveMessage(QString receiver_id, QString body)
             return;
         });
 }
-
 
 void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message)
 {
@@ -460,10 +496,9 @@ void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message
     domain::entity::MessageItem payload;
     payload = msgDto.toDomain ();
     const QString account = currentUserId();
-    const QString conversation = storageId(payload.sender_id) == storageId(account)
+    const QString conversation = MessageHistoryCache::conversationId(payload.sender_id) == MessageHistoryCache::conversationId(account)
         ? payload.recipient_id : payload.sender_id;
-    persistMessages(account, conversation, {payload});
-    restoreMediaPaths(account, payload);
+    persistMessage(account, conversation, msgDto);
     emit messageReceived (payload);
 
 }

@@ -3,7 +3,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+
 import Theme
+import Shared.UI
 
 Popup {
     id: filePopup
@@ -32,6 +34,16 @@ Popup {
         files = []
     }
 
+    function displayFileName(url) {
+        const path = String(url).split(/[?#]/)[0]
+        const name = path.substring(path.lastIndexOf("/") + 1)
+        try {
+            return decodeURIComponent(name)
+        } catch (error) {
+            return name
+        }
+    }
+
     function removeFile(index) {
         if (uploading) {
             return
@@ -39,6 +51,10 @@ Popup {
         const remaining = files.slice()
         remaining.splice(index, 1)
         files = remaining
+        if (filePopup.viewmodel) {
+            filePopup.viewmodel.resetAttachments()
+            filePopup.viewmodel.addAttachments(remaining.map(file => file.url))
+        }
         if (files.length === 0) {
             if (filePopup.viewmodel) {
                 filePopup.viewmodel.resetAttachments();
@@ -70,9 +86,9 @@ Popup {
                 id: txtTitle
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                text: filePopup.uploading ? qsTr("Uploading…") : filePopup.fileCount < 2
-                      ? "Send as file"
-                      : filePopup.fileCount + " files selected"
+                text: filePopup.uploading ? qsTr("Uploading…")
+                      : filePopup.compress ? qsTr("Send %n image(s)", "", filePopup.fileCount)
+                      : qsTr("Send %n file(s)", "", filePopup.fileCount)
                 color: Colors.textPrimary
                 font.family: Typography.family
                 font.pixelSize: Typography.title4
@@ -110,8 +126,103 @@ Popup {
             }
         }
 
+        GridView {
+            id: imageGrid
+            objectName: "attachmentImageGrid"
+            visible: filePopup.compress
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(Math.ceil(count / columns) * cellHeight, 260)
+            readonly property int columns: width >= 300 ? 3 : 2
+            cellWidth: width / columns
+            cellHeight: cellWidth
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: filePopup.compress ? filePopup.files : []
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            delegate: Item {
+                id: imageTile
+                required property int index
+                required property var modelData
+                width: imageGrid.cellWidth
+                height: imageGrid.cellHeight
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    radius: AppLayouts.m_radius
+                    color: Colors.suface2
+                    clip: true
+
+                    Image {
+                        id: thumbnail
+                        anchors.fill: parent
+                        source: imageTile.modelData.url
+                        sourceSize.width: 320
+                        sourceSize.height: 320
+                        asynchronous: true
+                        fillMode: Image.PreserveAspectCrop
+                        autoTransform: true
+                    }
+                    Image {
+                        anchors.centerIn: parent
+                        width: 28
+                        height: 28
+                        source: AppAssets.icDocument
+                        visible: thumbnail.status === Image.Error
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    BusyIndicator {
+                        anchors.centerIn: parent
+                        width: 32
+                        height: 32
+                        running: thumbnail.status === Image.Loading
+                        visible: running
+                    }
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 26
+                        color: "#99000000"
+                        Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            verticalAlignment: Text.AlignVCenter
+                            text: filePopup.displayFileName(imageTile.modelData.url)
+                            textFormat: Text.PlainText
+                            elide: Text.ElideMiddle
+                            color: "white"
+                            font.family: Typography.family
+                            font.pixelSize: Typography.caption
+                        }
+                    }
+                    Button {
+                        objectName: "removeImageAttachment"
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 5
+                        width: 26
+                        height: 26
+                        padding: 6
+                        enabled: !filePopup.uploading
+                        icon.source: AppAssets.icClose
+                        icon.color: "white"
+                        Accessible.name: qsTr("Remove %1").arg(filePopup.displayFileName(imageTile.modelData.url))
+                        background: Rectangle {
+                            radius: width / 2
+                            color: parent.hovered ? Colors.error : "#99000000"
+                        }
+                        onClicked: filePopup.removeFile(imageTile.index)
+                    }
+                }
+            }
+        }
+
         ScrollView {
             id: fileScroll
+            visible: !filePopup.compress
 
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(filePopup.fileCount * 50, 200)
@@ -122,7 +233,7 @@ Popup {
                 width: fileScroll.availableWidth
                 spacing: 0
                 Repeater {
-                    model: filePopup.viewmodel.attachmentModel
+                    model: filePopup.files
                     delegate: Item {
                         id: delegate
                         Layout.fillWidth: true
@@ -130,17 +241,8 @@ Popup {
                         implicitHeight: 50
                         required property int index
                         required property var modelData
-                        readonly property bool showImagePreview: filePopup.compress
-                            && /\.(avif|bmp|gif|heic|heif|jfif|jpeg|jpg|jxl|pbm|pgm|png|ppm|webp|xbm|xpm)$/i.test(String(modelData.url).split(/[?#]/)[0])
-                        readonly property string fileName: {
-                            const path = String(modelData.url).split(/[?#]/)[0]
-                            const name = path.substring(path.lastIndexOf("/") + 1)
-                            try {
-                                return decodeURIComponent(name)
-                            } catch (error) {
-                                return name
-                            }
-                        }
+                        readonly property bool showImagePreview: false
+                        readonly property string fileName: filePopup.displayFileName(modelData.url)
 
                         RowLayout {
                             width: delegate.width
@@ -180,7 +282,7 @@ Popup {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: delegate.modelData.fileName
+                                text: delegate.fileName
                                 font.family: Typography.family
                                 font.pixelSize: Typography.body
                                 font.weight: Typography.semiBold
@@ -200,7 +302,6 @@ Popup {
                                 hoverEnabled: true
                                 icon.color: hovered ? Colors.error : Colors.textPrimary
                                 onClicked:  {
-                                    console.log("File id: ", delegate.modelData.id)
                                     filePopup.removeFile(delegate.index)
                                 }
                                 HoverHandler {

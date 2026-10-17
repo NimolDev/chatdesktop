@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 import Theme
+import Shared.UI
 
 Item {
     id: root
@@ -18,20 +19,7 @@ Item {
         return files
     }
 
-    function compressibleUrls(urls) {
-        const mediaUrls = []
-        if (!urls || urls.length === 0) {
-            return mediaUrls
-        }
-        const mediaExtension = /\.(avif|bmp|gif|heic|heif|jfif|jpeg|jpg|jxl|pbm|pgm|png|ppm|webp|xbm|xpm|mov|m4v)$/
-        for (let i = 0; i < urls.length; ++i) {
-            const path = String(urls[i]).split(/[?#]/)[0].toLowerCase()
-            if (mediaExtension.test(path)) {
-                mediaUrls.push(urls[i])
-            }
-        }
-        return mediaUrls
-    }
+
 
     function resetHover() {
         withoutCompress.hovered = false
@@ -84,8 +72,10 @@ Item {
         }
 
         onEntered: drag => {
+
+            const allImage =  FileFormatesQml.isAllImage(drag.urls)
             drag.accepted = drag.hasUrls
-            root.canCompress = drag.hasUrls && root.compressibleUrls(drag.urls).length > 0
+            root.canCompress = allImage
             root.resetHover()
         }
         onPositionChanged: drag => {
@@ -106,7 +96,8 @@ Item {
             if (contains(withoutCompress, drop)) {
                 root.filesDropped(root.fileEntries(drop.urls, false), false)
             } else if (contains(compress, drop)) {
-                const mediaUrls = root.compressibleUrls(drop.urls)
+
+                           const mediaUrls = drop.urls
                 if (mediaUrls.length > 0) {
                     root.filesDropped(root.fileEntries(mediaUrls, true), true)
                 }

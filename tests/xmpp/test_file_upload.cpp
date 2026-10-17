@@ -56,6 +56,21 @@ class FileUploadTest : public QObject
     }
 
 private slots:
+    void progressStartsAtZero()
+    {
+        auto upload = create();
+        QList<QPair<qint64, qint64>> updates;
+        upload.operation->put(QNetworkRequest(url()), url("/download"),
+                              [&updates](qint64 sent, qint64 total) {
+            updates.append({sent, total});
+        });
+        QVERIFY(!updates.isEmpty());
+        QCOMPARE(updates.first().first, qint64(0));
+        QCOMPARE(updates.first().second, m_file.size());
+        upload.future.cancel();
+        QTRY_VERIFY(upload.future.isFinished());
+    }
+
     void initTestCase()
     {
         QVERIFY(m_file.open());

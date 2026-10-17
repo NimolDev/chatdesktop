@@ -52,6 +52,7 @@ QFuture<entity::MessageResponse> MessageUsecase::execute(QString user_id, int pa
                                              .remove(QLatin1Char('-'));
                 payload.is_mine = senderId == currentUserId;
             }
+            qDebug() << "Payload" << payloads.total;
             std::stable_sort(
                 payloads.messages.begin (),
                 payloads.messages.end(),

@@ -39,7 +39,7 @@ QString core::storage::FileNameHelper::hexNameV2(
     if (hex_chars < 8 || hex_chars > 64) {
         throw std::invalid_argument("hex_chars must be 8..64");
     }
-    const QByteArray key = (QStringLiteral("storage/cache/v2/") + secret).toUtf8();
+    const QByteArray key = (QStringLiteral("storage/cache") + secret).toUtf8();
     const QByteArray name = logical_name.toUtf8();
     unsigned char mac[EVP_MAX_MD_SIZE];
     unsigned int length = 0;

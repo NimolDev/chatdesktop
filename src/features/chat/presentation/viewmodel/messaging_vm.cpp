@@ -152,7 +152,7 @@ MessagingViewModel::MessagingViewModel(
             this,
             [this](const QString &id, const QString &path) {
                 for (auto it = m_message.messages.crbegin(); it != m_message.messages.crend(); ++it) {
-                    if (QUrl(it->body.content.media_url) == QUrl(path)) {
+                    if (it->id == id || QUrl(it->body.content.media_url) == QUrl(path)) {
                         m_fileUploads.insert(id, {it->id, 0, 0, true});
                         setUploadProgress(id, 0, true);
                         break;
@@ -242,27 +242,44 @@ void MessagingViewModel::sendVoice(qint64 duration)
         || receiver != m_activeConversationId) {
         return;
     }
-    const quint64 revision = m_voiceController.recordingRevision();
+    const QString uploadId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     m_voiceSendError.clear();
     emit voiceSendErrorChanged();
     m_isSendingVoice = true;
     emit isSendingVoiceChanged();
-    m_msgUsecase->sendVoice(receiver, file, duration)
-        .then(this, [this, revision](const QString &error) {
-            m_isSendingVoice = false;
-            emit isSendingVoiceChanged();
-            if (revision != m_voiceController.recordingRevision()) {
-                return;
-            }
-            if (!error.isEmpty()) {
+    auto sending = m_msgUsecase->sendVoice(receiver, file, duration, uploadId);
+
+    // The queued send owns its file URL. Release the composer immediately;
+    // completion of this upload must never reset a newer recording.
+    m_voiceController.cancelVoiceRecording();
+    const quint64 revision = m_voiceController.recordingRevision();
+    m_isSendingVoice = false;
+    emit isSendingVoiceChanged();
+    emit voiceMessageQueued();
+
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this,
+            [this, watcher, uploadId, revision] {
+        const bool canceled = watcher->future().isCanceled();
+        const QString error = canceled ? QString{} : watcher->result();
+        watcher->deleteLater();
+        if (canceled) {
+            removeCanceledUpload(uploadId);
+            return;
+        }
+        const auto upload = m_fileUploads.value(uploadId);
+        setUploadProgress(uploadId, error.isEmpty() ? 1 : upload.progress, false);
+        if (!error.isEmpty()) {
+            if (revision == m_voiceController.recordingRevision()) {
                 m_voiceSendError = error;
                 emit voiceSendErrorChanged();
                 emit voiceSendFailed(error);
-                return;
             }
-            m_voiceController.cancelVoiceRecording();
-            emit voiceMessageSent();
-        });
+            return;
+        }
+        emit voiceMessageSent();
+    });
+    watcher->setFuture(sending);
 }
 
 void MessagingViewModel::sendImage(const QString &caption)
@@ -290,14 +307,14 @@ void MessagingViewModel::startAttachmentUpload(
     m_cancelingAttachmentUpload = false;
     m_attachmentUploadError.clear();
     emit attachmentUploadChanged();
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, cancellation] {
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, cancellation, attachments] {
         const bool canceled = cancellation->isCanceled() || watcher->future().isCanceled();
         m_attachmentUploadError = canceled ? tr("Upload canceled.") : watcher->result();
         const bool success = !canceled && m_attachmentUploadError.isEmpty();
-        for (const auto &id : m_fileUploads.keys()) {
-            const auto upload = m_fileUploads.value(id);
+        for (const auto &attachment : attachments) {
+            const auto upload = m_fileUploads.value(attachment.id);
             if (upload.uploading) {
-                setUploadProgress(id, success ? 1 : upload.progress, false);
+                setUploadProgress(attachment.id, success ? 1 : upload.progress, false);
             }
         }
         m_attachmentWatcher = nullptr;
@@ -707,6 +724,7 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
     case DownloadErrorRole:
         return m_fileDownloads.value(messaging.id).error;
     case UploadProgressRole:
+        return 0.0;
     case IsUploadingRole:
         for (const auto &upload : m_fileUploads) {
             if (upload.messageId == messaging.id && upload.contentIndex == 0) {

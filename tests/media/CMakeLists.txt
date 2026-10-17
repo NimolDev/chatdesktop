@@ -88,3 +88,12 @@ target_include_directories(test_multiple_files PRIVATE
     ../../src/features/chat/presentation/viewmodel)
 target_link_libraries(test_multiple_files PRIVATE Qt6::Core Qt6::Multimedia Qt6::Qml Qt6::Test)
 add_test(NAME MultipleFiles COMMAND test_multiple_files)
+
+add_executable(test_voice_upload_queue test_voice_upload_queue.cpp ${voice_duration_sources}
+    ../../src/features/chat/presentation/viewmodel/attachment_model.cpp)
+target_include_directories(test_voice_upload_queue PRIVATE
+    ../../src/core ../../src/features/chat ../../src/features/chat/domain
+    ../../src/features/chat/presentation/viewmodel)
+target_link_libraries(test_voice_upload_queue PRIVATE
+    Qt6::Core Qt6::Multimedia Qt6::Qml Qt6::Test)
+add_test(NAME VoiceUploadQueue COMMAND test_voice_upload_queue)

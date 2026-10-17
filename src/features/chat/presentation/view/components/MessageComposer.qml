@@ -22,6 +22,10 @@ Rectangle {
                                         ? messagingViewModel.voiceSendError
                                         : (viewmodel ? viewmodel.voiceRecordingError : "")
     signal sendVoice(int duration)
+    signal filePicker(var urls)
+    signal imageAndVideoFileSelected(var urls)
+    signal filesSelected(var urls)
+    signal locationSelected(var coordinate)
 
     property bool _isRecoding: viewmodel ? viewmodel.isVoiceRecordingBusy : false
     readonly property bool hasVoicePreview: root.viewmodel && String(root.viewmodel.voiceRecordingFile).length > 0
@@ -48,7 +52,7 @@ Rectangle {
 
     Connections {
         target: root.messagingViewModel
-        function onVoiceMessageSent() { root.resetRecoding() }
+        function onVoiceMessageQueued() { root.resetRecoding() }
         function onVoiceSendFailed(message) {
             if (root.hasVoicePreview) {
                 root._isRecoding = true
@@ -179,6 +183,12 @@ Rectangle {
             objectName: "attachmentPopup"
             x: 0
             y: -(height + 16)
+            onFilePicker: urls => {
+                              root.filePicker(urls)
+                          }
+            onImageAndVideoFileSelected: urls => root.imageAndVideoFileSelected(urls)
+            onFilesSelected: urls => root.filesSelected(urls)
+            onLocationSelected: coordinate => root.locationSelected(coordinate)
         }
     }
 

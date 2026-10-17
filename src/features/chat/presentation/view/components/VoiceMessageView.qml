@@ -21,6 +21,9 @@ Item {
     property bool selected: false
     property var fileLocation
     property var duration: "0"
+    property string messageId: ""
+    property real uploadProgress: 0
+    property bool isUploading: false
 
     readonly property int padding: 8
     readonly property real availableBubbleWidth: Math.max(0,
@@ -204,16 +207,22 @@ Item {
 
                 DownloadCircleButton {
                     anchors.fill: parent
-                    iconSource: root.playing
+                    iconSource: root.isUploading ? AppAssets.icClose : root.playing
                                 ? AppAssets.icPause : AppAssets.icPlay
                     iconColor: "black"
-                    downloading: root.activePlayback && root.voiceController.voiceDownloading
+                    downloading: root.isUploading || (root.activePlayback && root.voiceController.voiceDownloading)
+                    indeterminate: false
                     trackColor: "transparent"
                     backgroundColor: Colors.white50
-                    strokeWidth: 0
-                    progress: root.activePlayback ? root.voiceController.voiceDownloadProgress : 0
+                    strokeWidth: root.isUploading ? 2 : 0
+                    progress: root.isUploading ? Math.max(0.01, root.uploadProgress)
+                              : root.activePlayback ? root.voiceController.voiceDownloadProgress : 0
                     onClicked: {
-                        if (root.voiceController) {
+                        if (root.isUploading) {
+                            if (root.messagingViewModel) {
+                                root.messagingViewModel.cancelFileUpload(root.messageId, 0)
+                            }
+                        } else if (root.voiceController) {
                             root.voiceController.playVoice(root.fileLocation)
                         }
                     }
@@ -237,7 +246,7 @@ Item {
                     from: 0
                     to: Math.max(1, root.activePlayback ? root.voiceController.voicePlaybackDuration : 0)
                     value: root.activePlayback ? root.voiceController.voicePlaybackPosition : 0
-                    enabled: root.activePlayback && root.voiceController.voicePlaybackSeekable
+                    enabled: !root.isUploading && root.activePlayback && root.voiceController.voicePlaybackSeekable
                     onMoved: root.voiceController.seekVoice(value)
                 }
                 RowLayout {
@@ -245,7 +254,11 @@ Item {
                     Text {
                         id: durationText1
 
-                        text: root.duration
+                        text: root.isUploading
+                              ? (root.uploadProgress > 0
+                                 ? qsTr("Uploading %1%").arg(Math.round(root.uploadProgress * 100))
+                                 : qsTr("Queued…"))
+                              : root.duration
                         color: Colors.textPrimary
                         font.family: Typography.family
                         font.pixelSize: Typography.caption

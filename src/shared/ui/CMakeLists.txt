@@ -21,6 +21,8 @@ qt_add_qml_module(ui
     QML_FILES ContextMenuItem.qml
     QML_FILES MySlider.qml
     QML_FILES DownloadCircleButton.qml
+    SOURCES file_formates.hpp
+    SOURCES FileFormatesQml.hpp
 
 )
 

@@ -135,20 +135,19 @@ Item {
                     backgroundColor: root.isOutgoing ? Colors.white50 : Colors.black500
                     iconColor: Colors.black500
                     downloading: root.isUploading || root.isDownloading
-                    // Downloads show only measured progress, starting with an empty ring.
-                    indeterminate: root.isUploading && root.uploadProgress <= 0
+                    // Keep a small rotating arc visible while the upload is queued.
+                    indeterminate: false
                     trackColor: "transparent"
                     progressColor: Colors.primary
                     strokeWidth: downloading ? 3 : 0
                     progressInset: 1
-                    progress: root.isUploading ? root.uploadProgress : root.downloadProgress
+                    progress: root.isUploading ? Math.max(0.01, root.uploadProgress) : root.downloadProgress
                     onClicked: {
                         if (root.isUploading) {
                             if (root.messagingViewModel) {
                                 root.messagingViewModel.cancelFileUpload(root.messageId, root.contentIndex)
                             }
-                        }
-                        if (root.isDownloading && root.messagingViewModel) {
+                        } else if (root.isDownloading && root.messagingViewModel) {
                             root.messagingViewModel.cancelFileDownload(root.messageId, root.contentIndex)
                         } else if (root.hasLocalFile) {
                             Qt.openUrlExternally(root.downloadedFile.toString().length > 0 ? root.downloadedFile : root.fileLocation)

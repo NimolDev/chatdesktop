@@ -1,4 +1,5 @@
 #include "storage/message_cache.hpp"
+#include "data/repository/message_history_cache.hpp"
 #include "data/dto/message_payload_dto.hpp"
 #include "storage/local_storage.hpp"
 #include "storage/file_name_helper.hpp"
@@ -49,7 +50,7 @@ int main(int argc, char **argv)
     check(MessageCache::save(QStringLiteral("[]"), name, secret));
     const auto batches = MessageCache::read(name, secret);
     check(batches.has_value() && *batches == QStringList{payload, QStringLiteral("[]")});
-    const QString path = QDir(directory).filePath((QStringLiteral("messages-v3-") + core::storage::FileNameHelper::hexNameV2(name, secret)));
+    const QString path = QDir(directory).filePath(core::storage::FileNameHelper::hexName(name, secret));
     MessageCache::closeAll();
     {
         core::storage::LocalStorage storage(path.toStdString(),
@@ -103,8 +104,8 @@ int main(int argc, char **argv)
     {
         core::storage::LocalStorage storage(path.toStdString(),
             core::constants::AppConstants::appSecretKey().toStdString());
-        check(storage.root("message-page-1").has_value());
-        check(storage.root("message-page-2").has_value());
+        check(storage.root("1").has_value());
+        check(storage.root("2").has_value());
     }
     check(MessageCache::readPage(name, secret, 1) == QStringLiteral("[]"));
     check(MessageCache::readPage(name, secret, 2) == payload);
@@ -133,6 +134,43 @@ int main(int argc, char **argv)
     auto decoded = data::dto::MessageDto::fromJson(document->object(), &parseError);
     check(decoded && decoded->page == 1 && decoded->messages.size() == 1);
     check(decoded->toDomain().messages.first().body.content.text == item.body.content.text);
+    MessageCache::closeAll();
+    // Repository cache: live messages survive stale fetches and process restarts.
+    using data::repository::MessageHistoryCache;
+    const QString account = QStringLiteral("account-1@example.test/desktop");
+    const QString conversation = QStringLiteral("peer-1@example.test/mobile");
+    auto live = item;
+    live.id = QStringLiteral("live-id");
+    live.body.message_id = QStringLiteral("wire-id");
+    const auto filesBeforeConversation = QDir(directory).entryList(QDir::Files).size();
+    check(MessageHistoryCache::saveMessage(account, conversation, live));
+    check(MessageHistoryCache::saveMessage(account, conversation, live));
+    MessageCache::closeAll();
+    auto history = MessageHistoryCache::read("account1", "peer1", 1);
+    check(history.messages.size() == 1 && history.total == 1 && history.total_pages == 1);
+    check(MessageHistoryCache::read("other-account", conversation, 1).messages.isEmpty());
+    check(MessageHistoryCache::savePage(account, conversation, response));
+    check(QDir(directory).entryList(QDir::Files).size() == filesBeforeConversation + 1);
+    history = MessageHistoryCache::read(account, conversation, 1);
+    check(history.messages.size() == 2 && history.total == 2);
+    // Server IDs can differ from the stable ID carried in the message body.
+    live.id = QStringLiteral("server-id");
+    data::dto::MessageDto acknowledged{{item, live}, 1, 200, 2, 1};
+    check(MessageHistoryCache::savePage(account, conversation, acknowledged));
+    check(QDir(directory).entryList(QDir::Files).size() == filesBeforeConversation + 1);
+    history = MessageHistoryCache::read(account, conversation, 1);
+    check(history.messages.size() == 2 && history.total == 2);
+    check(history.messages.last().id == QStringLiteral("server-id"));
+    auto olderPage = response;
+    olderPage.page = 2;
+    check(MessageHistoryCache::savePage(account, conversation, olderPage));
+    check(MessageHistoryCache::read(account, conversation, 2).messages.size() == 1);
+    check(QDir(directory).entryList(QDir::Files).size() == filesBeforeConversation + 1);
+    // An authoritative empty page replaces old messages, including acknowledged live ones.
+    check(MessageHistoryCache::savePage(account, conversation, {{}, 1, 200, 0, 0}));
+    check(MessageHistoryCache::read(account, conversation, 1).messages.isEmpty());
+    check(MessageHistoryCache::read(account, conversation, 2).messages.size() == 1);
+    check(!MessageHistoryCache::savePage(account, conversation, {{}, 0, 200, 0, 0}));
     MessageCache::closeAll();
     QFile corrupt(path);
     check(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));

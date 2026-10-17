@@ -49,7 +49,8 @@ SendMessageUsecase::SendMessageUsecase(
 QFuture<QString> SendMessageUsecase::sendVoice(
     const QString &receiver,
     const QUrl &file,
-    qint64 duration)
+    qint64 duration,
+    const QString &messageId)
 {
     const QFileInfo info(file.toLocalFile());
     if (receiver.isEmpty() || !file.isLocalFile() || !info.isFile()
@@ -60,13 +61,15 @@ QFuture<QString> SendMessageUsecase::sendVoice(
     payload.is_mine = true;
     payload.sender_id = m_repository->currentUserId();
     payload.receiver_id = receiver;
-    payload.message_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    payload.message_id = messageId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : messageId;
     payload.timestamp = QString::number(QDateTime::currentSecsSinceEpoch());
     payload.content.type = domain::entity::MessageType::Voice;
     payload.content.text = "Voice message";
     payload.content.file_size = info.size();
     payload.content.file_name = info.fileName();
     payload.content.duration = duration;
+    payload.content.media_url = file.toString(QUrl::FullyEncoded);
+    payload.content.localpath = file.toLocalFile();
     return m_repository->sendVoice(payload, file);
 
 }

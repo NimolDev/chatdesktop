@@ -41,10 +41,13 @@ qt_add_qml_module(chat
         data/dto/message_dto.hpp
         data/repository/message_repository_impl.hpp
         data/repository/message_repository_impl.cpp
+        data/repository/media_repository_impl.hpp
+        data/repository/media_repository_impl.cpp
         data/dto/message_payload_dto.hpp
         data/mapping/message_payload_mapper.hpp
         data/dto/message_store.hpp
         data/dto/conversations_dto.hpp
+        data/repository/message_history_cache.hpp
 
         domain/messaging.hpp
         domain/repository/conversation_list_repository.hpp
@@ -59,21 +62,23 @@ qt_add_qml_module(chat
         domain/usecase/message_usecase.cpp
         domain/usecase/send_message_usecase.hpp
         domain/usecase/send_message_usecase.cpp
+        domain/repository/media_repository.hpp
+        domain/entity/attachment_item.hpp
 
         presentation/view/bubble.hpp
         presentation/view/bubble.cpp
         presentation/viewmodel/messaging_vm.hpp
         presentation/viewmodel/messaging_vm.cpp
+        presentation/viewmodel/voice_message_controller.hpp
+        presentation/viewmodel/voice_message_controller.cpp
         presentation/viewmodel/conversations_vm.hpp
         presentation/viewmodel/conversations_vm.cpp
         presentation/viewmodel/home_chat_vm.hpp
         presentation/viewmodel/home_chat_vm.cpp
-        SOURCES domain/repository/media_repository.hpp
-        SOURCES data/repository/media_repository_impl.hpp data/repository/media_repository_impl.cpp
-        SOURCES presentation/viewmodel/voice_message_controller.hpp presentation/viewmodel/voice_message_controller.cpp
-        SOURCES presentation/viewmodel/attachment_model.hpp presentation/viewmodel/attachment_model.cpp
-        SOURCES domain/entity/attachment_item.hpp
-        SOURCES presentation/coordinator/image_view_coordinator.hpp presentation/coordinator/image_view_coordinator.cpp
+        presentation/viewmodel/attachment_model.hpp
+        presentation/viewmodel/attachment_model.cpp
+        presentation/coordinator/image_view_coordinator.hpp
+        presentation/coordinator/image_view_coordinator.cpp
 
 )
 
@@ -97,8 +102,7 @@ target_link_libraries(chat
         core::media
         core::storage
         core::platform
-        # localization
-        # theme
+        core::xmpp
 )
 
 find_package(Qt6 REQUIRED COMPONENTS ShaderTools)

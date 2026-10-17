@@ -195,6 +195,11 @@ Item {
     Component {
         id: voiceMessage
         VoiceMessageView {
+            readonly property var modelData: root.viewmodel && root.viewmodel.contents
+                                             ? root.viewmodel.contents[0] : root.viewmodel
+            messageId: root.viewmodel ? root.viewmodel.id : ""
+            uploadProgress: modelData ? modelData.uploadProgress : 0
+            isUploading: modelData ? modelData.isUploading : false
             messagingViewModel: root.messagingViewModel
             maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
             isOutgoing: root.isOutgoing

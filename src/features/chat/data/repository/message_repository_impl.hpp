@@ -5,6 +5,8 @@
 #include "domain/repository/message_repository.hpp"
 #include "network/network_client.hpp"
 
+#include <QQueue>
+#include <functional>
 
 namespace data {
 namespace repository {
@@ -21,6 +23,9 @@ public:
 
     // MessageRepository interface
 public:
+
+    // using SendFunctiion = std::function<QFuture<bool>(core::xmpp::UploadedFile &)>;
+
     QFuture<domain::entity::MessageResponse > fetchMessageById(QString user_id, int page) override;
     QFuture<QString> sendMessage(domain::entity::Payload &payload) override;
     QString currentUserId() const override;
@@ -36,7 +41,7 @@ public:
         const QUrl &file) override;
     QFuture<QString> sendFiles(
         domain::entity::Payload &payload,
-       const QList<domain::AttachmentItem> &attachments,
+        const domain::AttachmentItem &attachment,
         domain::repository::UploadCancellationPtr cancellation = {}) override;
     QFuture<bool> cancelFileUpload(const QString &upload_id) override;
 
@@ -46,7 +51,6 @@ private:
     {
         QString id;
         QString file_path;
-        qsizetype contentIndex = -1;
 
         domain::repository::UploadCancellationPtr cancellation;
         QFuture<core::xmpp::UploadedFile> future;
@@ -58,6 +62,22 @@ private:
     QString m_currentUserId;
 
 
+
+    struct SendQueueEntry
+    {
+        std::function<QFuture<QString>()> start;
+        domain::repository::UploadCancellationPtr cancellation;
+        std::shared_ptr<FileUploadTask> task;
+        std::shared_ptr<QPromise<QString>> promise;
+
+    };
+    QQueue<SendQueueEntry> m_queue;
+    QFuture<QString> enqueue(std::function<QFuture<QString>()> start,
+                             domain::repository::UploadCancellationPtr cancellation = {},
+                             std::shared_ptr<FileUploadTask> task = {});
+    QFuture<QString> sendMessageNow(domain::entity::Payload payload);
+    void nextProcess();
+    bool m_processing = false;
 
 private:
     void saveMessage(QString reciever_id, QString body);

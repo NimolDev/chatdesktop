@@ -28,10 +28,8 @@ public:
     virtual QFuture<QString> sendVoice(domain::entity::Payload &payload, const QUrl &file) = 0;
     virtual QFuture<QString> sendImage(domain::entity::Payload &payload, const QList<domain::AttachmentItem> &attachments, UploadCancellationPtr cancellation = {}) = 0;
     virtual QFuture<QString> sendFile(domain::entity::Payload &payload, const QUrl &file) = 0;
-    virtual QFuture<QString> sendFiles(domain::entity::Payload &payload, const QList<domain::AttachmentItem> &attachments, UploadCancellationPtr cancellation = {}) = 0;
+    virtual QFuture<QString> sendFiles(domain::entity::Payload &payload, const domain::AttachmentItem &attachments, UploadCancellationPtr cancellation = {}) = 0;
     virtual QFuture<bool> cancelFileUpload(const QString &upload_id) = 0;
-
-public:
     virtual QString currentUserId() const  = 0;
 
 signals:
