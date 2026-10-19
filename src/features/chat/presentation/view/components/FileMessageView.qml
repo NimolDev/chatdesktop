@@ -13,29 +13,32 @@ Item {
     implicitHeight: bubble.height
     readonly property Item bubbleItem: bubble
 
+    required property var viewmodel
+    property var messagingViewModel: null // viewmodel for media controll
     property int maxBubbleWidth: 400
-    property bool isOutgoing: true
-    property bool isSeen: false
-    property string msg: "Test"
-    property string date: ""
     property bool selected: false
-    property url fileLocation: ""
+    property bool selectionMode: false
 
-    property var messagingViewModel: null
-    property string messageId: ""
-    property int contentIndex: 0
-    property string displayName: ""
-    property real downloadProgress: 0
-    property bool isDownloading: false
-    property url downloadedFile: ""
-    property string downloadError: ""
+    readonly property var fileData: viewmodel && viewmodel.contents
+                                    && viewmodel.contents.length > 0
+                                    ? viewmodel.contents[0] : viewmodel
+    readonly property bool isOutgoing: viewmodel ? (viewmodel.isMine ?? false) : false
+    readonly property bool isSeen: viewmodel ? (viewmodel.seen ?? false) : false
+    readonly property string msg: viewmodel ? (viewmodel.body ?? "") : ""
+    readonly property string date: viewmodel ? (viewmodel.sentAt ?? "") : ""
+    readonly property string messageId: viewmodel ? (viewmodel.id ?? "") : ""
+    readonly property int contentIndex: fileData ? (fileData.contentIndex ?? 0) : 0
+    readonly property url fileLocation: fileData ? (fileData.filePath ?? "") : ""
+    readonly property string displayName: fileData ? (fileData.fileName ?? "") : ""
+    readonly property real fileSize: fileData ? (fileData.fileSize ?? 0) : 0
+    readonly property real downloadProgress: fileData ? (fileData.downloadProgress ?? 0) : 0
+    readonly property bool isDownloading: fileData ? (fileData.isDownloading ?? false) : false
+    readonly property url downloadedFile: fileData ? (fileData.downloadedFile ?? "") : ""
+    readonly property string downloadError: fileData ? (fileData.downloadError ?? "") : ""
+    readonly property real uploadProgress: fileData ? (fileData.uploadProgress ?? 0) : 0
+    readonly property bool isUploading: fileData ? (fileData.isUploading ?? false) : false
     readonly property bool hasLocalFile: downloadedFile.toString().length > 0 || fileLocation.toString().startsWith("file:")
 
-    property real uploadProgress: 0
-    property bool isUploading: false
-
-    property real fileSize: 0
-    property bool selectionMode: false
     readonly property string fileName: {
         if (displayName.length > 0) {
             return displayName
@@ -103,28 +106,6 @@ Item {
                 Layout.fillWidth: true
                 spacing: root.padding
 
-                // Button {
-                //     id: openButton
-                //     Layout.preferredWidth: 42
-                //     Layout.preferredHeight: 42
-                //     enabled: !root.selectionMode && root.fileLocation.toString().length > 0
-                //     icon.source: AppAssets.icAttactment
-                //     icon.color: root.isOutgoing ? Colors.black500 : Colors.white50
-                //     hoverEnabled: true
-                //     Accessible.name: qsTr("Open %1").arg(root.fileName)
-                //     ToolTip.visible: hovered
-                //     ToolTip.text: qsTr("Open file")
-                //     background: Rectangle {
-                //         radius: 21
-                //         color: root.isOutgoing ? Colors.white50 : Colors.black500
-                //         opacity: openButton.hovered ? 0.8 : 1
-                //     }
-                //     onClicked: Qt.openUrlExternally(root.fileLocation)
-                //     HoverHandler {
-                //         cursorShape: openButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                //     }
-                // }
-
                 DownloadCircleButton {
                     id: btnDownload
                     objectName: "fileTransferButton"
@@ -141,7 +122,8 @@ Item {
                     progressColor: Colors.primary
                     strokeWidth: downloading ? 3 : 0
                     progressInset: 1
-                    progress: root.isUploading ? Math.max(0.01, root.uploadProgress) : root.downloadProgress
+                    progress: root.isUploading ? Math.max(0.01, root.uploadProgress)
+                                               : root.downloadProgress
                     onClicked: {
                         if (root.isUploading) {
                             if (root.messagingViewModel) {
@@ -150,7 +132,8 @@ Item {
                         } else if (root.isDownloading && root.messagingViewModel) {
                             root.messagingViewModel.cancelFileDownload(root.messageId, root.contentIndex)
                         } else if (root.hasLocalFile) {
-                            Qt.openUrlExternally(root.downloadedFile.toString().length > 0 ? root.downloadedFile : root.fileLocation)
+                            Qt.openUrlExternally(root.downloadedFile.toString().length > 0
+                                                 ? root.downloadedFile : root.fileLocation)
                         } else if (root.messagingViewModel) {
                             root.messagingViewModel.downloadFile(root.messageId, root.contentIndex)
                         }

@@ -12,9 +12,9 @@ Popup {
     property var viewmodel
     objectName: "attachmentUploadDialog"
 
-    signal send(var urls,string caption, bool compress)
+    signal send(string caption)
     property var files: []
-    property bool compress
+    readonly property bool imagesOnly: files.every(file => file.compress === true)
     readonly property bool uploading: filePopup.viewmodel ? filePopup.viewmodel.isUploadingAttachments : false
     readonly property bool canceling: filePopup.viewmodel ? filePopup.viewmodel.isCancelingAttachmentUpload : false
 
@@ -53,7 +53,9 @@ Popup {
         files = remaining
         if (filePopup.viewmodel) {
             filePopup.viewmodel.resetAttachments()
-            filePopup.viewmodel.addAttachments(remaining.map(file => file.url))
+            for (const file of remaining) {
+                filePopup.viewmodel.addAttachments([file.url], file.compress === true)
+            }
         }
         if (files.length === 0) {
             if (filePopup.viewmodel) {
@@ -87,7 +89,7 @@ Popup {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: filePopup.uploading ? qsTr("Uploading…")
-                      : filePopup.compress ? qsTr("Send %n image(s)", "", filePopup.fileCount)
+                      : filePopup.imagesOnly ? qsTr("Send %n image(s)", "", filePopup.fileCount)
                       : qsTr("Send %n file(s)", "", filePopup.fileCount)
                 color: Colors.textPrimary
                 font.family: Typography.family
@@ -126,126 +128,108 @@ Popup {
             }
         }
 
-        GridView {
-            id: imageGrid
-            objectName: "attachmentImageGrid"
-            visible: filePopup.compress
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(Math.ceil(count / columns) * cellHeight, 260)
-            readonly property int columns: width >= 300 ? 3 : 2
-            cellWidth: width / columns
-            cellHeight: cellWidth
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            model: filePopup.compress ? filePopup.files : []
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-            delegate: Item {
-                id: imageTile
-                required property int index
-                required property var modelData
-                width: imageGrid.cellWidth
-                height: imageGrid.cellHeight
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    radius: AppLayouts.m_radius
-                    color: Colors.suface2
-                    clip: true
-
-                    Image {
-                        id: thumbnail
-                        anchors.fill: parent
-                        source: imageTile.modelData.url
-                        sourceSize.width: 320
-                        sourceSize.height: 320
-                        asynchronous: true
-                        fillMode: Image.PreserveAspectCrop
-                        autoTransform: true
-                    }
-                    Image {
-                        anchors.centerIn: parent
-                        width: 28
-                        height: 28
-                        source: AppAssets.icDocument
-                        visible: thumbnail.status === Image.Error
-                        fillMode: Image.PreserveAspectFit
-                    }
-                    BusyIndicator {
-                        anchors.centerIn: parent
-                        width: 32
-                        height: 32
-                        running: thumbnail.status === Image.Loading
-                        visible: running
-                    }
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 26
-                        color: "#99000000"
-                        Text {
-                            anchors.fill: parent
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 6
-                            verticalAlignment: Text.AlignVCenter
-                            text: filePopup.displayFileName(imageTile.modelData.url)
-                            textFormat: Text.PlainText
-                            elide: Text.ElideMiddle
-                            color: "white"
-                            font.family: Typography.family
-                            font.pixelSize: Typography.caption
-                        }
-                    }
-                    Button {
-                        objectName: "removeImageAttachment"
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.margins: 5
-                        width: 26
-                        height: 26
-                        padding: 6
-                        enabled: !filePopup.uploading
-                        icon.source: AppAssets.icClose
-                        icon.color: "white"
-                        Accessible.name: qsTr("Remove %1").arg(filePopup.displayFileName(imageTile.modelData.url))
-                        background: Rectangle {
-                            radius: width / 2
-                            color: parent.hovered ? Colors.error : "#99000000"
-                        }
-                        onClicked: filePopup.removeFile(imageTile.index)
-                    }
-                }
-            }
-        }
-
         ScrollView {
-            id: fileScroll
-            visible: !filePopup.compress
-
+            id: attachmentScroll
+            objectName: "attachmentScroll"
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(filePopup.fileCount * 50, 200)
+            Layout.preferredHeight: Math.min(attachmentColumn.implicitHeight, 320)
             clip: true
             contentWidth: availableWidth
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
             ColumnLayout {
-                width: fileScroll.availableWidth
-                spacing: 0
+                id: attachmentColumn
+                width: attachmentScroll.availableWidth
+                spacing: 4
                 Repeater {
+                    id: attachmentRepeater
+                    objectName: "attachmentRepeater"
                     model: filePopup.files
                     delegate: Item {
-                        id: delegate
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 50
-                        implicitHeight: 50
+                        id: attachmentRow
+                        objectName: "attachmentRow" + index
                         required property int index
                         required property var modelData
+                        readonly property bool compressed: modelData.compress === true
                         readonly property bool showImagePreview: false
                         readonly property string fileName: filePopup.displayFileName(modelData.url)
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: compressed ? 160 : 50
+                        implicitHeight: compressed ? 160 : 50
+                        Rectangle {
+                            visible: attachmentRow.compressed
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            radius: AppLayouts.m_radius
+                            color: Colors.suface2
+                            clip: true
 
+                            Image {
+                                id: thumbnail
+                                anchors.fill: parent
+                                source: attachmentRow.compressed ? attachmentRow.modelData.url : ""
+                                sourceSize.width: 320
+                                sourceSize.height: 320
+                                asynchronous: true
+                                fillMode: Image.PreserveAspectCrop
+                                autoTransform: true
+                            }
+                            Image {
+                                anchors.centerIn: parent
+                                width: 28
+                                height: 28
+                                source: AppAssets.icDocument
+                                visible: thumbnail.status === Image.Error
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            BusyIndicator {
+                                anchors.centerIn: parent
+                                width: 32
+                                height: 32
+                                running: thumbnail.status === Image.Loading
+                                visible: running
+                            }
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 26
+                                color: "#99000000"
+                                Text {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 6
+                                    verticalAlignment: Text.AlignVCenter
+                                    text: filePopup.displayFileName(attachmentRow.modelData.url)
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideMiddle
+                                    color: "white"
+                                    font.family: Typography.family
+                                    font.pixelSize: Typography.caption
+                                }
+                            }
+                            Button {
+                                objectName: "removeImageAttachment"
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: 5
+                                width: 26
+                                height: 26
+                                padding: 6
+                                enabled: !filePopup.uploading
+                                icon.source: AppAssets.icClose
+                                icon.color: "white"
+                                Accessible.name: qsTr("Remove %1").arg(filePopup.displayFileName(attachmentRow.modelData.url))
+                                background: Rectangle {
+                                    radius: width / 2
+                                    color: parent.hovered ? Colors.error : "#99000000"
+                                }
+                                onClicked: filePopup.removeFile(attachmentRow.index)
+                            }
+                        }
                         RowLayout {
-                            width: delegate.width
+                            visible: !attachmentRow.compressed
+                            width: attachmentRow.width
                             height: 50
                             spacing: 8
 
@@ -261,7 +245,7 @@ Popup {
                                 Image {
                                     id: fileCompress
                                     anchors.fill: parent
-                                    source: delegate.showImagePreview ? delegate.modelData.url : ""
+                                    source: attachmentRow.showImagePreview ? attachmentRow.modelData.url : ""
                                     sourceSize.width: 180
                                     sourceSize.height: 180
                                     asynchronous: true
@@ -282,7 +266,7 @@ Popup {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: delegate.fileName
+                                text: attachmentRow.fileName
                                 font.family: Typography.family
                                 font.pixelSize: Typography.body
                                 font.weight: Typography.semiBold
@@ -292,6 +276,7 @@ Popup {
                             }
                             Button {
                                 id: btnRemove
+                                objectName: "removeFileAttachment"
                                 enabled: !filePopup.uploading
                                 icon.source: AppAssets.icClose
                                 padding: 0
@@ -302,14 +287,13 @@ Popup {
                                 hoverEnabled: true
                                 icon.color: hovered ? Colors.error : Colors.textPrimary
                                 onClicked:  {
-                                    filePopup.removeFile(delegate.index)
+                                    filePopup.removeFile(attachmentRow.index)
                                 }
                                 HoverHandler {
                                     cursorShape: Qt.PointingHandCursor
                                 }
                             }
                         }
-
                     }
                 }
             }
@@ -378,17 +362,8 @@ Popup {
             onClicked: {
 
                 if (filePopup.viewmodel) {
-                    const  urls = filePopup.files
-                    .map(file => file.url)
-                    .filter(url => url !== undefined && url !== null && url !== "")
-                    if (filePopup.files[0]["compress"] === true) {
-                        filePopup.send(urls, captionInput.text, true)
-
-                    } else {
-                        filePopup.send(urls, captionInput.text, false)
-
-                    }
-                     filePopup.close()
+                    filePopup.send(captionInput.text)
+                    filePopup.close()
                 }
 
             }

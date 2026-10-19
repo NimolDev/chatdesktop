@@ -60,4 +60,39 @@ int main()
         legacy["content"] = QJsonArray{dto.content.toJson(), dto.content.toJson()};
         CHECK(!data::dto::PayloadDto::fromJsonString(QString::fromUtf8(QJsonDocument(legacy).toJson())));
     }
+    // History can return attachments in a different order than they were selected.
+    QList<data::dto::MessageItemDto> attachments;
+    for (int i = 0; i < 3; ++i) {
+        domain::entity::Payload payload;
+        payload.attachment_batch_id = "selection";
+        payload.attachment_index = i;
+        payload.content.type = i == 1 ? domain::entity::MessageType::File
+                                      : domain::entity::MessageType::Image;
+        data::dto::MessageItemDto message;
+        message.id = QString::number(i);
+        message.sender_id = "sender";
+        message.body = data::mapping::toDto(payload);
+        attachments.append(message);
+    }
+    QList<int> permutation{0, 1, 2};
+    do {
+        data::dto::MessageItemDto unrelated;
+        unrelated.id = "unrelated";
+        data::dto::MessageDto history{{attachments[permutation[0]], unrelated,
+                                      attachments[permutation[1]], attachments[permutation[2]]}, 1, 200, 4, 1};
+        auto decoded = data::dto::MessageDto::fromJson(history.toJson());
+        CHECK(decoded.has_value());
+        const auto restored = decoded->toDomain();
+        CHECK(restored.messages[0].id == "0");
+        CHECK(restored.messages[1].id == "unrelated");
+        CHECK(restored.messages[2].id == "1");
+        CHECK(restored.messages[3].id == "2");
+        CHECK(restored.messages[2].body.content.type == domain::entity::MessageType::File);
+        CHECK(restored.messages[3].body.attachment_index == 2);
+    } while (std::next_permutation(permutation.begin(), permutation.end()));
+    // Older messages have no selection metadata and retain the server order.
+    data::dto::PayloadDto legacy;
+    CHECK(!legacy.toJson().contains("attachment_index"));
+    CHECK(data::dto::PayloadDto::fromJson(legacy.toJson()).attachment_index == -1);
+
 }

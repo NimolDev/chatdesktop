@@ -66,7 +66,7 @@ MessageRepositoryImpl::MessageRepositoryImpl(
             &core::xmpp::XmppManager::uploadProgressChanged,
             this,
             [this](const QString &id, double progress) {
-                // qDebug() << "Upload ID: " << id << "Uploading :" << progress;
+                qDebug() << "Upload ID: " << id << "Uploading :" << progress;
                 if (progress < 1) {
                     emit fileUploadProgress (id, progress);
                 } else {
@@ -376,7 +376,7 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
         if (message.content.type == domain::entity::MessageType::Image) {
             prepared = task->cancellation->track(
                 core::media::ImageCompress::compressImageToCache(
-                    task->file_path, message.message_id + QStringLiteral("-0")))
+                    task->file_path, message.message_id + QStringLiteral("-0") ))
                 .then([](const QString &path) {
                     return path.isEmpty() ? QString{} : QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
                 });

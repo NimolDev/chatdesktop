@@ -141,28 +141,11 @@ Item {
         id: fileMessage
 
         FileMessageView {
-            readonly property var modelData: root.viewmodel && root.viewmodel.contents
-                                             ? root.viewmodel.contents[0] : root.viewmodel
-
-            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+            viewmodel: root.viewmodel
             messagingViewModel: root.messagingViewModel
-            messageId: root.viewmodel ? root.viewmodel.id : ""
-            contentIndex: 0
-            downloadProgress: modelData ? modelData.downloadProgress : null
-            isDownloading: modelData ? modelData.isDownloading : false
-            downloadedFile: modelData ? modelData.downloadedFile : ""
-            downloadError: modelData ? modelData.downloadError : ""
-            uploadProgress:  modelData ? modelData.uploadProgress : 0
-            isUploading: modelData ?  modelData.isUploading : false
-            isOutgoing: root.isOutgoing
-            isSeen: root.isSeen
-            msg:  root.msg
-            date: root.date
+            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
             selected: root.selected
             selectionMode: root.selectionMode
-            fileLocation: modelData ? modelData.filePath : ""
-            displayName: modelData ?  modelData.fileName : ""
-            fileSize: modelData ? modelData.fileSize : 0
         }
     }
 
@@ -170,14 +153,12 @@ Item {
         id: imageMessage
         ImageMessageView {
             maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
-            isOutgoing: root.isOutgoing
-            isSeen: root.isSeen
-            msg: root.msg
-            date: root.date
+            viewmodel: root.viewmodel
+            mediaControl: root.messagingViewModel
             selected: root.selected
             selectionMode: root.selectionMode
-            contents: root.viewmodel && root.viewmodel.contents ? root.viewmodel.contents : []
-            fileLocation: root.fileLocation
+
+
         }
     }
 

@@ -446,10 +446,9 @@ Item {
                                          }
                                          console.log("File Picker" , files[0]["compress"])
                                          if (root.viewmodel) {
-                                             root.viewmodel.addAttachments(urls)
+                                             root.viewmodel.addAttachments(urls, true)
                                          }
                                          filePopup.files = filePopup.files.concat(files)
-                                         filePopup.compress = true
                                          filePopup.open()
                                          root.filesDropped(files)
                                      }
@@ -460,10 +459,9 @@ Item {
                             }
                             console.log("File Picker" , files[0]["compress"])
                             if (root.viewmodel) {
-                                root.viewmodel.addAttachments(urls)
+                                root.viewmodel.addAttachments(urls, false)
                             }
                             filePopup.files = filePopup.files.concat(files)
-                            filePopup.compress = false
                             filePopup.open()
                             root.filesDropped(files)
                         }
@@ -502,11 +500,10 @@ Item {
                             const urls = files.map(file => file.url)
                             .filter(url => url !== undefined && url !== null && url !== "")
                             if (root.viewmodel) {
-                                root.viewmodel.addAttachments(urls)
+                                root.viewmodel.addAttachments(urls, compress)
                             }
 
                             filePopup.files = filePopup.files.concat(files)
-                            filePopup.compress = compress
                             root.filesDropped(files)
                             filePopup.open()
                         }
@@ -516,13 +513,9 @@ Item {
     Components.AttachmentUploadDialog {
         id: filePopup
         viewmodel: root.viewmodel
-        onSend: (urls, caption, compress) => {
+        onSend: caption => {
                     if (root.viewmodel) {
-                        if (compress) {
-                            root.viewmodel.sendImage(caption)
-                        } else {
-                            root.viewmodel.sendFile(caption)
-                        }
+                        root.viewmodel.sendSelectedAttachments(caption)
                         root.viewmodel.resetAttachments()
                     }
                 }

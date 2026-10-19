@@ -1,6 +1,7 @@
 #include "send_message_usecase.hpp"
 
 #include <QUuid>
+#include <optional>
 #include <QFutureWatcher>
 #include <QFileInfo>
 #include <QtCore/qdatetime.h>
@@ -79,7 +80,7 @@ namespace {
 QFuture<QString> sendAttachments(
     repository::MessageRepository *repository, QObject *context,
     const QString &receiver, const QList<domain::AttachmentItem> &attachments,
-    const QString &caption, repository::UploadCancellationPtr cancellation, bool images)
+    const QString &caption, repository::UploadCancellationPtr cancellation, std::optional<bool> imageOverride)
 {
     if (receiver.isEmpty() || attachments.isEmpty()) {
         return QtFuture::makeReadyValueFuture(QStringLiteral("Select attachments and a recipient before sending."));
@@ -101,11 +102,16 @@ QFuture<QString> sendAttachments(
             promise->finish();
         }
     });
+    const QString batchId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    int attachmentIndex = 0;
     auto remaining = std::make_shared<int>(attachments.size());
     auto error = std::make_shared<QString>();
     for (const auto &attachment : attachments) {
+        const bool images = imageOverride.value_or(attachment.compress);
         domain::entity::Payload payload;
         payload.is_mine = true;
+        payload.attachment_batch_id = batchId;
+        payload.attachment_index = attachmentIndex++;
         payload.sender_id = repository->currentUserId();
         payload.receiver_id = receiver;
         payload.message_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -160,6 +166,13 @@ QFuture<QString> SendMessageUsecase::sendFiles(
     const QString &caption, repository::UploadCancellationPtr cancellation)
 {
     return sendAttachments(m_repository.get(), this, receiver, attachments, caption, cancellation, false);
+}
+
+QFuture<QString> SendMessageUsecase::sendSelectedAttachments(
+    const QString &receiver, const QList<domain::AttachmentItem> &attachments,
+    const QString &caption, repository::UploadCancellationPtr cancellation)
+{
+    return sendAttachments(m_repository.get(), this, receiver, attachments, caption, cancellation, std::nullopt);
 }
 
 QFuture<bool> SendMessageUsecase::cancelUpload(const QString &upload_id)

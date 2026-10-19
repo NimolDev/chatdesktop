@@ -6,48 +6,61 @@ import QtQuick.Effects
 
 import Features.Chat
 import Theme
+import Shared.UI
 
 Item {
     id: root
 
     implicitWidth: 600
     implicitHeight: bubble.height
+
     readonly property Item bubbleItem: bubble
 
+    property var viewmodel
+    property var mediaControl: null
     property int maxBubbleWidth: 400
-    property bool isOutgoing: true
-    property bool isSeen: false
-    property string msg: ""
-    property string date: ""
+    property int maxImageHeight: 320
     property bool selected: false
     property bool selectionMode: false
-    property url fileLocation: ""
-    property var contents: []
-    readonly property var imageUrls: {
-        const urls = []
-        for (const item of contents) {
-            if (item.msgType === 4 && item.filePath) {
-                urls.push(item.filePath)
-            }
-            if (urls.length === 5) {
-                break
-            }
-        }
-        if (urls.length === 0 && String(fileLocation).length > 0) {
-            urls.push(fileLocation)
-        }
-        return urls
-    }
 
-    readonly property int padding: 8
+    readonly property bool isOutgoing: viewmodel ? (viewmodel.isMine ?? false) : false
+    readonly property bool isSeen: viewmodel ? (viewmodel.seen ?? false) : false
+    readonly property string msg: viewmodel ? (viewmodel.body ?? "") : ""
+    readonly property string date: viewmodel ? (viewmodel.sentAt ?? "") : ""
+    readonly property var fileData: viewmodel && viewmodel.contents
+                                    && viewmodel.contents.length > 0
+                                    ? viewmodel.contents[0] : viewmodel
+    readonly property string messageId: viewmodel ? (viewmodel.id ?? "") : ""
+    readonly property int contentIndex: fileData ? (fileData.contentIndex ?? 0) : 0
+    readonly property url fileLocation: fileData ? (fileData.filePath ?? "") : ""
+    readonly property url imageSource: {
+        return fileLocation
+    }
+    // media control
+    readonly property real downloadProgress: fileData ? (fileData.downloadProgress ?? 0) : 0
+    readonly property bool isDownloading: fileData ? (fileData.isDownloading ?? false) : false
+    readonly property url downloadedFile: fileData ? (fileData.downloadedFile ?? "") : ""
+    readonly property string downloadError: fileData ? (fileData.downloadError ?? "") : ""
+    readonly property real uploadProgress: fileData ? (fileData.uploadProgress ?? 0) : 0
+    readonly property bool isUploading: fileData ? (fileData.isUploading ?? false) : false
+    readonly property bool hasLocalFile: downloadedFile.toString().length > 0 || fileLocation.toString().startsWith("file:")
+
+    // view layouts
+    readonly property int padding: AppLayouts.m_padding
     readonly property real availableBubbleWidth: Math.max(0, Math.min(maxBubbleWidth, width))
+    readonly property real imageAspectRatio: tile.aspectRatio
+    readonly property real imageHorizontalPadding: padding * 3.5
+    readonly property real sizedBubbleWidth: imageAspectRatio > 0 && imageAspectRatio < 1
+        ? Math.min(availableBubbleWidth, maxImageHeight * imageAspectRatio + imageHorizontalPadding)
+        : availableBubbleWidth
     readonly property bool isCollapsedMessage: width > AppLayouts.width
 
     Bubble {
         id: bubble
 
-        width: root.availableBubbleWidth
-        height: content.implicitHeight + root.padding * 2
+        width: root.sizedBubbleWidth
+         height: content.implicitHeight
+
         states: [
             State {
                 name: "outgoing"
@@ -75,74 +88,95 @@ Item {
 
         ColumnLayout {
             id: content
+            x: 0
+            y: 0
+            width: Math.max(0, bubble.width - 12)
 
-            x: bubble.outgoing ? root.padding : root.padding * 2.5
-            y: root.padding
-            width: Math.max(0, bubble.width - root.padding * 3.5)
             spacing: root.padding
 
-            GridLayout {
-                id: imageGrid
-                objectName: "imageGrid"
+            Item {
+                id: tile
+                objectName: "imageTile"
+                readonly property real aspectRatio: photo.status === Image.Ready && photo.implicitHeight > 0
+                                                    ? photo.implicitWidth / photo.implicitHeight : 0
                 Layout.fillWidth: true
-                columns: root.imageUrls.length === 1 ? 1 : 2
-                rowSpacing: 4
-                columnSpacing: 4
-                visible: root.imageUrls.length > 0
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: tile.aspectRatio > 0
+                    ? width / tile.aspectRatio : Math.min(200, width)
+                visible: String(root.imageSource).length > 0
 
-                Repeater {
-                    model: root.imageUrls
-                    delegate: Item {
-                        id: tile
-                        objectName: "imageTile"
-                        required property int index
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 0
-                        Layout.preferredWidth: 1
-                        Layout.columnSpan: root.imageUrls.length > 1
-                                           && root.imageUrls.length % 2 === 1 && index === 0 ? 2 : 1
-                        Layout.preferredHeight: root.imageUrls.length === 1
-                            ? (photo.status === Image.Ready && photo.implicitWidth > 0
-                               ? Math.min(320, imageGrid.width * photo.implicitHeight / photo.implicitWidth)
-                               : Math.min(200, imageGrid.width))
-                            : Math.min(160, Math.max(0, (imageGrid.width - imageGrid.columnSpacing) / 2))
-                        clip: true
 
-                        Image {
-                            id: photo
-                            anchors.fill: parent
-                            source: root.fileLocation
-                            asynchronous: true
-                            cache: true
-                            fillMode: root.imageUrls.length === 1 ? Image.PreserveAspectFit : Image.PreserveAspectCrop
-                            autoTransform: true
-                            sourceSize.width: 800
-                            sourceSize.height: 800
-                        }
+                clip: true
 
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: !root.selectionMode && photo.status === Image.Ready
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked:  {
-                                ImageViewCoordinator.open(root.fileLocation)
-                            }
-                        }
-
-                        Text {
-                            anchors.centerIn: parent
-                            width: parent.width
-                            visible: photo.status !== Image.Ready
-                            text: photo.status === Image.Loading ? qsTr("Loading image…")
-                                                                 : qsTr("Image unavailable")
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            color: root.isOutgoing ? Colors.textPrimary : Colors.black900
-                            font.family: Typography.family
-                            font.pixelSize: Typography.body
-                        }
+                Image {
+                    id: photo
+                    anchors.fill: parent
+                    source: root.imageSource
+                    asynchronous: true
+                    cache: true
+                    fillMode: Image.PreserveAspectFit
+                    autoTransform: true
+                    sourceSize.width: 800
+                    sourceSize.height: 800
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: imageMask
                     }
+                }
+
+                DownloadCircleButton {
+                    width: 50
+                    height: 50
+                    z: 2
+                    anchors.centerIn: parent
+                    backgroundColor: "transparent"
+                    iconSource: AppAssets.icClose
+                    iconColor: Colors.white50
+                    progressColor: Colors.white50
+                    strokeWidth: 3
+                    progress: 0.01
+                    downloading: true
+                    onClicked: {
+                        console.log("MessageId: ", root.messageId,
+                                    "ContentIndex: ", root.contentIndex)
+                    }
+
+                }
+
+                Rectangle {
+                    id: imageMask
+                    anchors.fill: parent
+                    topLeftRadius: Math.min(bubble.radius, width / 2, height / 2)
+                    topRightRadius: Math.min(bubble.radius, width / 2, height / 2)
+
+                    color: "white"
+                    antialiasing: true
+                    visible: false
+                    layer.enabled: true
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !root.selectionMode && photo.status === Image.Ready
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked:  {
+                        ImageViewCoordinator.open(root.imageSource)
+                    }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    visible: photo.status !== Image.Ready
+                    text: photo.status === Image.Loading ? qsTr("Loading image…")
+                                                         : qsTr("Image unavailable")
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    color: root.isOutgoing ? Colors.textPrimary : Colors.black900
+                    font.family: Typography.family
+                    font.pixelSize: Typography.body
                 }
             }
 
@@ -160,6 +194,9 @@ Item {
 
             RowLayout {
                 Layout.alignment: Qt.AlignRight
+                Layout.rightMargin: root.padding
+                Layout.leftMargin: root.padding
+                Layout.bottomMargin: root.padding
                 spacing: 3
 
                 Text {

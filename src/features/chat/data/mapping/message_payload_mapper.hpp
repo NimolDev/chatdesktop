@@ -27,7 +27,9 @@ namespace mapping {
         .receiver_id = payload.receiver_id,
         .reply_message_id = payload.reply_message_id,
         .timestamp = payload.timestamp,
-        .content = toDto(payload.content)
+        .content = toDto(payload.content),
+        .attachment_batch_id = payload.attachment_batch_id,
+        .attachment_index = payload.attachment_index
     };
 }
 

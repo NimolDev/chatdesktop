@@ -22,7 +22,7 @@ public:
     };
     explicit AttachmentModel(QObject *parent = nullptr);
 
-    void addFiles(const QList<QUrl> &urls);
+    void addFiles(const QList<QUrl> &urls, bool compress = false);
     void setProgress(const QString &id, double progress);
     void setState(const QString &id, domain::AttachmentItem::State state);
     void setError(const QString &id, const QString &error);

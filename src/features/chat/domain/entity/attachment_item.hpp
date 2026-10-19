@@ -20,7 +20,7 @@ struct AttachmentItem
     QUrl url;
     QString file_name;
     qint64 file_size = 0;
-    bool compress;
+    bool compress = false;
 
     double progress = 0.0;
     State state = State::Pending;

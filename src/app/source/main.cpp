@@ -13,8 +13,12 @@
 #include <QLockFile>
 #include <QStandardPaths>
 #include <QQuickStyle>
+#include <QQmlEngine>
+#include <qqmlregistration.h>
+
 
 #include "app/app_state.hpp"
+#include "network/network_monitor.hpp"
 
 #include "application/app_info.hpp"
 #include "localization/language_manager.hpp"
@@ -127,17 +131,29 @@ int main(int argc, char *argv[])
     // when an alert is clicked. Stop that second process before it constructs
     // another QML engine/window. Keep the lock alive for the entire main().
 
+    auto &network_monitor = core::network::NetworkMonitor::instance ();
+    QObject::connect(&network_monitor,
+                     &core::network::NetworkMonitor::networkConnected,
+                     []() {
+                         qDebug() << "Network connected";
+
+                     });
+    QObject::connect (&network_monitor,
+                     &core::network::NetworkMonitor::networkDisconnected,
+                     []() {
+                         qDebug() << "Network disconnected";
+                     });
 
 #ifdef QT_NO_DEBUG
-    // const QString instanceLockPath = QDir(
-    //     QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-    //     ).filePath(core::application::AppInfo::bundleIdentifier()
-    //                + QStringLiteral(".lock"));
-    // QLockFile instanceLock(instanceLockPath);
-    // if (!instanceLock.tryLock()) {
-    //     qInfo() << "ChatApp is already running; refusing duplicate launch";
-    //     return EXIT_SUCCESS;
-    // }
+    const QString instanceLockPath = QDir(
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+        ).filePath(core::application::AppInfo::bundleIdentifier()
+                   + QStringLiteral(".lock"));
+    QLockFile instanceLock(instanceLockPath);
+    if (!instanceLock.tryLock()) {
+        qInfo() << "ChatApp is already running; refusing duplicate launch";
+        return EXIT_SUCCESS;
+    }
 #endif
     app.setQuitOnLastWindowClosed (false);
 
@@ -167,6 +183,11 @@ int main(int argc, char *argv[])
     QStyleHints *styleHints = QGuiApplication::styleHints();
     styleHints->setColorScheme(Qt::ColorScheme::Dark);
 
+    qmlRegisterSingletonInstance (
+        "App.Core",
+        1, 0,
+        "NetworkMonitor",
+        &core::network::NetworkMonitor::instance());
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,
@@ -175,6 +196,7 @@ int main(int argc, char *argv[])
         Qt::QueuedConnection
     );
     engine.loadFromModule("ChatApp", "Main");
+
 
 
 
@@ -191,7 +213,7 @@ int main(int argc, char *argv[])
     }
     core::platform::PlatformMainWindow platform;
     platform.setup(window);
-    platform.setTitleBarColor (window, QColor(0x1B1B1B));
+    platform.setTitleBarColor (window, QColor(0x111315));
 
     core::platform::PlatformTray tray;
     tray.setup (window, &app);

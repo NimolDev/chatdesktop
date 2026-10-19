@@ -79,7 +79,7 @@ private:
     QPainterPath createIncomingPath(const QRectF &rect) const;
 
 private:
-    QColor m_color{ "#2F80ED" };
+    QColor m_color{ 0x2F80ED };
 
     bool m_outgoing{true};
     bool m_showTail = true;

@@ -14,6 +14,7 @@ add_library(network STATIC
     auth_interceptor.hpp auth_interceptor.cpp
     network_client.hpp network_client.cpp
     http_download_service.hpp http_download_service.cpp
+    network_monitor.hpp network_monitor.cpp
 
 )
 add_library(core::network ALIAS network)

@@ -282,6 +282,11 @@ void MessagingViewModel::sendVoice(qint64 duration)
     watcher->setFuture(sending);
 }
 
+void MessagingViewModel::sendSelectedAttachments(const QString &caption)
+{
+    startAttachmentUpload(m_attachmentModel->getItems(), caption, std::nullopt);
+}
+
 void MessagingViewModel::sendImage(const QString &caption)
 {
     auto attachments = m_attachmentModel->getItems ();
@@ -295,7 +300,7 @@ void MessagingViewModel::sendFile(const QString &caption)
 }
 
 void MessagingViewModel::startAttachmentUpload(
-    const QList<domain::AttachmentItem> &attachments, const QString &caption, bool images)
+    const QList<domain::AttachmentItem> &attachments, const QString &caption, std::optional<bool> images)
 {
     // if (isUploadingAttachments()) {
     //     return;
@@ -325,7 +330,8 @@ void MessagingViewModel::startAttachmentUpload(
         emit attachmentUploadFinished(success);
     });
     const QString receiver = normalizedId(m_activeConversationId);
-    watcher->setFuture(images ? m_msgUsecase->sendImage(receiver, attachments, caption, cancellation)
+    watcher->setFuture(!images.has_value() ? m_msgUsecase->sendSelectedAttachments(receiver, attachments, caption, cancellation)
+                              : *images ? m_msgUsecase->sendImage(receiver, attachments, caption, cancellation)
                               : m_msgUsecase->sendFiles(receiver, attachments, caption, cancellation));
 }
 
@@ -423,9 +429,9 @@ QVariantMap MessagingViewModel::createAttachment(const QUrl &url, bool compress)
     };
 }
 
-void MessagingViewModel::addAttachments(const QList<QUrl> &urls)
+void MessagingViewModel::addAttachments(const QList<QUrl> &urls, bool compress)
 {
-    m_attachmentModel->addFiles (urls);
+    m_attachmentModel->addFiles(urls, compress);
 }
 
 void MessagingViewModel::resetAttachments()

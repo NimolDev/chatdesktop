@@ -1,6 +1,8 @@
 #ifndef FEATURES_CHAT_DATA_DTO_MESSAGE_PAYLOAD_DTO_HPP
 #define FEATURES_CHAT_DATA_DTO_MESSAGE_PAYLOAD_DTO_HPP
 
+#include <algorithm>
+#include <QHash>
 #include <QString>
 #include <QtTypes>
 #include <QJsonObject>
@@ -134,6 +136,8 @@ struct PayloadDto
     QString reply_message_id;
     QString timestamp;
     ContentDto content;
+    QString attachment_batch_id;
+    int attachment_index = -1;
 
 
     QJsonObject toJson() const
@@ -145,6 +149,10 @@ struct PayloadDto
         obj["reply_message_id"] = reply_message_id;
         obj["timestamp"] = timestamp;
         obj["content"] = content.toJson();
+        if (!attachment_batch_id.isEmpty() && attachment_index >= 0) {
+            obj["attachment_batch_id"] = attachment_batch_id;
+            obj["attachment_index"] = attachment_index;
+        }
         return obj;
     }
 
@@ -157,6 +165,8 @@ struct PayloadDto
         p.receiver_id      = obj.value("receiver_id").toString();
         p.reply_message_id = obj.value("reply_message_id").toString();
         p.timestamp         = obj.value("timestamp").toString();
+        p.attachment_batch_id = obj.value("attachment_batch_id").toString();
+        p.attachment_index = obj.value("attachment_index").toInt(-1);
         const auto contentValue = obj.value(QStringLiteral("content"));
         if (contentValue.isObject()) {
             p.content = ContentDto::fromJson(contentValue.toObject(), error_message);
@@ -205,7 +215,9 @@ struct PayloadDto
             .receiver_id = receiver_id,
             .reply_message_id = reply_message_id,
             .timestamp = timestamp,
-            .content = content.toDomain()
+            .content = content.toDomain(),
+            .attachment_batch_id = attachment_batch_id,
+            .attachment_index = attachment_index
         };
     }
 };
@@ -337,6 +349,30 @@ struct MessageDto
             msg.append (std::move (m.toDomain ()));
         }
 
+
+        // Restore selection order only within each sender's attachment batch.
+        // Keep unrelated messages in their original history positions.
+        QHash<QString, QHash<QString, QList<qsizetype>>> batches;
+        for (qsizetype i = 0; i < msg.size(); ++i) {
+            const auto &body = msg[i].body;
+            if (!body.attachment_batch_id.isEmpty() && body.attachment_index >= 0) {
+                batches[msg[i].sender_id][body.attachment_batch_id].append(i);
+            }
+        }
+        for (const auto &senderBatches : batches) {
+            for (const auto &positions : senderBatches) {
+                QList<domain::entity::MessageItem> ordered;
+                for (const auto position : positions) {
+                    ordered.append(msg[position]);
+                }
+                std::stable_sort(ordered.begin(), ordered.end(), [](const auto &left, const auto &right) {
+                    return left.body.attachment_index < right.body.attachment_index;
+                });
+                for (qsizetype i = 0; i < positions.size(); ++i) {
+                    msg[positions[i]] = std::move(ordered[i]);
+                }
+            }
+        }
 
         return {
             .messages = std::move (msg),

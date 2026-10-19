@@ -3,6 +3,7 @@
 
 #include <QAbstractListModel>
 #include <QObject>
+#include <optional>
 #include <QFutureWatcher>
 #include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
@@ -78,6 +79,7 @@ public:
     Q_INVOKABLE void sendMessage(const QString &receiver_id, const QString &msg);
     Q_INVOKABLE void deleteMessage(QList<int> rows);
     Q_INVOKABLE void requestCall(const QString &receiverId, const QString &userName);
+    Q_INVOKABLE void sendSelectedAttachments(const QString &caption);
     Q_INVOKABLE void sendImage(const QString &caption);
     Q_INVOKABLE void sendFile( const QString &caption);
     Q_INVOKABLE void sendVoice(qint64 duration);
@@ -87,7 +89,7 @@ public:
     Q_INVOKABLE void cancelFileUpload(const QString &messageId, int contentIndex = 0);
 
     Q_INVOKABLE QVariantMap createAttachment(const QUrl &url, bool compress);
-    Q_INVOKABLE void addAttachments(const QList<QUrl> &urls);
+    Q_INVOKABLE void addAttachments(const QList<QUrl> &urls, bool compress = false);
     Q_INVOKABLE void resetAttachments();
     Q_INVOKABLE void getImageList();
 
@@ -147,7 +149,7 @@ private:
 
     void startAttachmentUpload(
         const QList<domain::AttachmentItem> &attachments,
-        const QString &caption, bool images
+        const QString &caption, std::optional<bool> images
         );
     QFutureWatcher<QString> *m_attachmentWatcher = nullptr;
     domain::repository::UploadCancellationPtr m_attachmentCancellation;

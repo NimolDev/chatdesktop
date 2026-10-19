@@ -39,6 +39,8 @@ struct Payload
     QString reply_message_id;
     QString timestamp;
     Content content;
+    QString attachment_batch_id;
+    int attachment_index = -1;
 };
 
 struct MessageItem

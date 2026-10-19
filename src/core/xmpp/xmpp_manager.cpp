@@ -125,7 +125,7 @@ void XmppManager::connectToServer(
         .jid = normalized_jid,
         .password = password,
         .host = host.trimmed(),
-        // .host  = "172.16.28.253",
+        // .host  = "172.16.29.7",
         .port = port
     };
 

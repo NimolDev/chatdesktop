@@ -12,11 +12,17 @@ public:
     QFuture<QString> sendMessage(domain::entity::Payload &) override { return ready(); }
     QFuture<QString> sendVoice(domain::entity::Payload &, const QUrl &) override { return ready(); }
     QFuture<QString> sendFile(domain::entity::Payload &, const QUrl &) override { return ready(); }
-    QFuture<QString> sendImage(domain::entity::Payload &, const QList<domain::AttachmentItem> &, domain::repository::UploadCancellationPtr) override { return ready(); }
-    QList<domain::entity::Payload> sent;
-    QFuture<QString> sendFiles(domain::entity::Payload &payload, const QList<domain::AttachmentItem> &items, domain::repository::UploadCancellationPtr) override
+    QList<bool> imageRoutes;
+    QFuture<QString> sendImage(domain::entity::Payload &payload, const QList<domain::AttachmentItem> &, domain::repository::UploadCancellationPtr) override
     {
-        Q_ASSERT(items.size() == 1);
+        imageRoutes.append(true);
+        sent.append(payload);
+        return ready();
+    }
+    QList<domain::entity::Payload> sent;
+    QFuture<QString> sendFiles(domain::entity::Payload &payload, const domain::AttachmentItem &, domain::repository::UploadCancellationPtr) override
+    {
+        imageRoutes.append(false);
         sent.append(payload);
         return ready();
     }
@@ -61,9 +67,54 @@ private slots:
         QTRY_VERIFY(future.isFinished());
         QVERIFY(future.result().isEmpty());
         QCOMPARE(repo->sent.size(), 2);
+        QVERIFY(!repo->sent[0].attachment_batch_id.isEmpty());
+        QCOMPARE(repo->sent[0].attachment_batch_id, repo->sent[1].attachment_batch_id);
+        QCOMPARE(repo->sent[0].attachment_index, 0);
+        QCOMPARE(repo->sent[1].attachment_index, 1);
         QVERIFY(repo->sent[0].message_id != repo->sent[1].message_id);
         QCOMPARE(repo->sent[0].content.media_url, QUrl::fromLocalFile(first.fileName()).toString());
         QCOMPARE(repo->sent[1].content.media_url, QUrl::fromLocalFile(second.fileName()).toString());
+    }
+
+    void mixedSelection_data()
+    {
+        QTest::addColumn<bool>("firstCompressed");
+        QTest::newRow("image-then-file") << true;
+        QTest::newRow("file-then-image") << false;
+    }
+
+    void mixedSelection()
+    {
+        QFETCH(bool, firstCompressed);
+        QTemporaryFile file;
+        QVERIFY(file.open());
+        file.write("attachment");
+        file.flush();
+        const QUrl url = QUrl::fromLocalFile(file.fileName());
+        auto repo = std::make_shared<FilesRepository>();
+        MessagingViewModel vm(std::make_shared<domain::usecase::MessageUsecase>(repo),
+                              std::make_shared<domain::usecase::SendMessageUsecase>(repo));
+        vm.fetchMessage("peer");
+        QTRY_VERIFY(!vm.isLoading());
+        vm.addAttachments({url}, firstCompressed);
+        vm.addAttachments({url}, !firstCompressed);
+        vm.sendSelectedAttachments("Mixed caption");
+        vm.resetAttachments();
+        QTRY_VERIFY(!vm.isUploadingAttachments());
+        QVERIFY(vm.attachmentUploadError().isEmpty());
+        QCOMPARE(repo->imageRoutes, (QList<bool>{firstCompressed, !firstCompressed}));
+        QCOMPARE(repo->sent.size(), 2);
+        QVERIFY(!repo->sent[0].attachment_batch_id.isEmpty());
+        QCOMPARE(repo->sent[0].attachment_batch_id, repo->sent[1].attachment_batch_id);
+        QCOMPARE(repo->sent[0].attachment_index, 0);
+        QCOMPARE(repo->sent[1].attachment_index, 1);
+        for (int i = 0; i < 2; ++i) {
+            const auto expected = repo->imageRoutes[i] ? domain::entity::MessageType::Image
+                                                      : domain::entity::MessageType::File;
+            QCOMPARE(repo->sent[i].content.type, expected);
+            QCOMPARE(repo->sent[i].content.text, QStringLiteral("Mixed caption"));
+            QCOMPARE(repo->sent[i].content.media_url, url.toString());
+        }
     }
 
     void independentTransfers()

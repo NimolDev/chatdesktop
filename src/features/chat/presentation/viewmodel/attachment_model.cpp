@@ -7,7 +7,7 @@ AttachmentModel::AttachmentModel(QObject *parent)
     : QAbstractListModel{parent}
 {}
 
-void AttachmentModel::addFiles(const QList<QUrl> &urls)
+void AttachmentModel::addFiles(const QList<QUrl> &urls, bool compress)
 {
     beginResetModel ();
     for (const auto &url : std::as_const (urls)) {
@@ -17,6 +17,7 @@ void AttachmentModel::addFiles(const QList<QUrl> &urls)
 
         item.id = QUuid::createUuid ().toString (QUuid::WithoutBraces);
         item.url = url;
+        item.compress = compress;
         item.file_name = info.fileName ();
         item.file_size = info.size ();
         item.state = domain::AttachmentItem::State::Pending;
