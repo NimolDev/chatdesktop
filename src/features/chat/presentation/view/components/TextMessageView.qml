@@ -1,6 +1,6 @@
-import QtQuick 2.15
+import QtQuick
 import QtQuick.Layouts
-import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 
 import Features.Chat
 import Theme
@@ -12,6 +12,9 @@ Item {
 
     property Item bubbleItem: root.isOutgoing ? bubbleOutgoing : bubbleIncoming
 
+    property var viewmodel
+    property var messagingViewModel: null
+    readonly property bool messageSending: messagingViewModel ? (messagingViewModel.messageSending ?? false) : false
     property int maxBubbleWidth: 400
     property bool isOutgoing: true
     property bool isSeen: false
@@ -227,33 +230,35 @@ Item {
                     font.weight: Typography.regular
                 }
 
+
+
                 Item {
+                    id: statusIcon
+
                     visible: root.isOutgoing
 
+                    Layout.preferredWidth: root.isSeen ? 20 : 15
                     Layout.preferredHeight: root.isSeen ? 20 : 15
-                    Layout.preferredWidth: height
 
                     Image {
                         id: icon
-
                         anchors.fill: parent
 
-                        source: root.isSeen
-                                ? AppAssets.icDuobleCheck
+                        source: root.viewmodel
+                                ? (root.viewmodel.sending
+                                   ? AppAssets.icClock
+                                   : (root.isSeen
+                                      ? AppAssets.icDuobleCheck
+                                      : AppAssets.icCheck))
                                 : AppAssets.icCheck
 
                         visible: false
                         fillMode: Image.PreserveAspectFit
                     }
-
-                    MultiEffect {
+                    ColorOverlay {
                         anchors.fill: icon
-
                         source: icon
-
-                        brightness: 1.0
-                        colorization: 1.0
-                        colorizationColor: Colors.primary
+                        color: Colors.primary
                     }
                 }
             }
@@ -267,6 +272,7 @@ Item {
             }
         }
     }
+
 
 
 

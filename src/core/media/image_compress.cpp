@@ -11,30 +11,14 @@
 #include <QPainter>
 #include <QSaveFile>
 #include <QUrl>
+#include <QBuffer>
 
-QFuture<QString> core::media::ImageCompress::compressImageToCache(
-    const QString &input, const QString &messageId,
-    int maxWidth, int maxHeight, int quality)
-{
-    if (messageId.isEmpty() || messageId == QStringLiteral(".")
-        || messageId == QStringLiteral("..") || messageId.contains('/')
-        || messageId.contains('\\')) {
-        return QtFuture::makeReadyValueFuture(QString());
-    }
-    const QString output = core::storage::MediaCache::imagePath(messageId);
-    return compressImageToJpg(input, output, maxWidth, maxHeight, quality)
-        .then([output](bool success) { return success ? output : QString(); });
-}
+namespace {
 
-QFuture<bool> core::media::ImageCompress::compressImageToJpg(
-    const QString &input,
-    const QString &output,
-    int maxWidth,
-    int maxHeight,
-    int quality)
+QByteArray jpegBytes(const QString &input, int maxWidth, int maxHeight, int quality)
 {
     if (maxWidth <= 0 || maxHeight <= 0) {
-        return QtFuture::makeReadyValueFuture(false);
+        return {};
     }
     const QUrl inputUrl(input);
     QImageReader reader(inputUrl.isLocalFile() ? inputUrl.toLocalFile() : input);
@@ -42,7 +26,7 @@ QFuture<bool> core::media::ImageCompress::compressImageToJpg(
 
     if(!reader.canRead ()) {
         LOG_WARNING(QStringLiteral ("Cannot read image: %1").arg (reader.errorString ()));
-        return QtFuture::makeReadyValueFuture (false);
+        return {};
     }
     // Decode at a smaller size when possible to reduce memory usage.
     const QSize original_size = reader.size ();
@@ -63,7 +47,7 @@ QFuture<bool> core::media::ImageCompress::compressImageToJpg(
 
     if (image.isNull ()) {
         LOG_WARNING (QStringLiteral ("Failed to load image: %1").arg (reader.errorString ()));
-        return QtFuture::makeReadyValueFuture (false);
+        return {};
     }
 
     if (image.width() > maxWidth || image.height() > maxHeight) {
@@ -83,10 +67,11 @@ QFuture<bool> core::media::ImageCompress::compressImageToJpg(
         image = flattened;
     }
 
-    QSaveFile destination(output);
+    QByteArray bytes;
+    QBuffer destination(&bytes);
     if (!destination.open(QIODevice::WriteOnly)) {
         LOG_WARNING(QStringLiteral("Cannot open image cache: %1").arg(destination.errorString()));
-        return QtFuture::makeReadyValueFuture(false);
+        return {};
     }
     QImageWriter writer(&destination, "jpg");
     writer.setQuality (qBound (0, quality, 100));
@@ -94,7 +79,32 @@ QFuture<bool> core::media::ImageCompress::compressImageToJpg(
 
     if (!writer.write (image)) {
         LOG_WARNING (QStringLiteral ("Failed to save JPEG: %1").arg (writer.errorString ()));
-        return QtFuture::makeReadyValueFuture (false);
+        return {};
     }
-    return QtFuture::makeReadyValueFuture(destination.commit());
+    return bytes;
+}
+
+} // namespace
+
+QFuture<QString> core::media::ImageCompress::compressImageToCache(
+    const QString &input, const QString &messageId,
+    const QString &account, int maxWidth, int maxHeight, int quality)
+{
+    if (messageId.isEmpty()) {
+        return QtFuture::makeReadyValueFuture(QString());
+    }
+    const auto bytes = jpegBytes(input, maxWidth, maxHeight, quality);
+    const auto output = core::storage::MediaCache::imagePath(messageId, QStringLiteral("jpg"), account);
+    const bool saved = core::storage::MediaCache::save(output, bytes);
+    return QtFuture::makeReadyValueFuture(saved ? output : QString());
+}
+
+QFuture<bool> core::media::ImageCompress::compressImageToJpg(
+    const QString &input, const QString &output, int maxWidth, int maxHeight, int quality)
+{
+    const auto bytes = jpegBytes(input, maxWidth, maxHeight, quality);
+    QSaveFile destination(output);
+    const bool saved = !bytes.isEmpty() && destination.open(QIODevice::WriteOnly)
+                       && destination.write(bytes) == bytes.size() && destination.commit();
+    return QtFuture::makeReadyValueFuture(saved);
 }

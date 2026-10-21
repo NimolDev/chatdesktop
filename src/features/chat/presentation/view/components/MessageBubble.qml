@@ -165,6 +165,8 @@ Item {
     Component {
         id: textMessage
         TextMessageView {
+            viewmodel: root.viewmodel
+            messagingViewModel: root.messagingViewModel
             maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
             isOutgoing: root.isOutgoing
             isSeen: root.isSeen

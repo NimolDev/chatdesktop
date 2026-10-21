@@ -5,9 +5,40 @@
 #include <algorithm>
 #include <QUuid>
 #include <QFileInfo>
-
+#include <QDir>
+#include "storage/media_cache.hpp"
+#include "storage/user_data.hpp"
+#include <QPromise>
+#include <QThreadPool>
 
 namespace {
+
+QUrl imageDisplayUrl(const domain::entity::MessageItem &message)
+{
+    const auto &content = message.body.content;
+    if (content.type == domain::entity::MessageType::Voice
+        && QFileInfo(content.localpath).isFile()) {
+        return QUrl::fromLocalFile(content.localpath);
+    }
+    if (content.type == domain::entity::MessageType::Image) {
+        if (QFileInfo(content.localpath).isFile()) {
+            return QUrl::fromLocalFile(content.localpath);
+        }
+        if (message.is_mine) {
+            const auto cached = core::storage::MediaCache::imagePath(
+                message.id + QStringLiteral("-0"), QStringLiteral("jpg"), message.sender_id);
+            auto source = core::storage::MediaCache::imageUrl(cached);
+            if (source.isEmpty() && core::storage::MediaCache::migrateLegacyImage(
+                    message.id + QStringLiteral("-0"), message.sender_id)) {
+                source = core::storage::MediaCache::imageUrl(cached);
+            }
+            if (!source.isEmpty()) {
+                return source;
+            }
+        }
+    }
+    return QUrl(content.media_url);
+}
 
 QString  voiceRecordingDurationStr(quint32 duration) {
     const qint64 milliseconds = std::max<qint64>(0, duration);
@@ -21,6 +52,63 @@ QString  voiceRecordingDurationStr(quint32 duration) {
 }
 
 } // namespace
+
+QUrl MessagingViewModel::cachedFileUrl(const QString &localPath, const QString &remoteUrl) const
+{
+    const auto key = localPath + QChar(u'\0') + remoteUrl;
+    const auto found = m_cachedFileUrls.constFind(key);
+    if (found != m_cachedFileUrls.cend()) {
+        return found.value();
+    }
+    // An empty entry also marks an outstanding lookup (or a cache miss).
+    // data() must never decrypt storage while QML is creating delegates.
+    m_cachedFileUrls.insert(key, {});
+    auto *self = const_cast<MessagingViewModel *>(this);
+    auto *watcher = new QFutureWatcher<QUrl>(self);
+    const auto generation = m_fetchRequestId;
+    connect(watcher, &QFutureWatcher<QUrl>::finished, self,
+            [self, watcher, key, remoteUrl, generation]() {
+                watcher->deleteLater();
+                if (generation != self->m_fetchRequestId || watcher->future().isCanceled()) {
+                    return;
+                }
+                const auto result = watcher->result();
+                self->m_cachedFileUrls.insert(key, result);
+                if (result.isEmpty()) {
+                    return;
+                }
+                for (int row = 0; row < self->m_message.messages.size(); ++row) {
+                    const auto &content = self->m_message.messages[row].body.content;
+                    if (content.type == domain::entity::MessageType::File && content.media_url == remoteUrl) {
+                        emit self->dataChanged(self->index(row), self->index(row),
+                                               {ContentsRole, DownloadedFileRole});
+                    }
+                }
+            });
+    auto promise = std::make_shared<QPromise<QUrl>>();
+    promise->start();
+    watcher->setFuture(promise->future());
+    QThreadPool::globalInstance()->start([promise, localPath, remoteUrl]() {
+        QUrl result;
+        try {
+            if (QFileInfo(localPath).isFile()) {
+                result = QUrl::fromLocalFile(localPath);
+            } else {
+                const auto user = core::storage::UserData::getCurrentUser();
+                const auto path = core::storage::MediaCache::localFilePath(
+                    QUrl(remoteUrl), user ? user->user_id : QString{});
+                if (!path.isEmpty()) {
+                    result = QUrl::fromLocalFile(path);
+                }
+            }
+        } catch (...) {
+            // An unreadable cache must not prevent the conversation rendering.
+        }
+        promise->addResult(result);
+        promise->finish();
+    });
+    return {};
+}
 
 MessagingViewModel *MessagingViewModel::s_instance = nullptr;
 
@@ -50,6 +138,19 @@ MessagingViewModel::MessagingViewModel(
 {
     if (m_mediaRepository) {
         using domain::repository::MediaRepository;
+        connect(m_mediaRepository.get(), &MediaRepository::downloadStarted, this,
+                [this](const QString &request) {
+                    if (!request.startsWith(QStringLiteral("file:"))) {
+                        return;
+                    }
+                    const auto id = request.mid(5);
+                    auto it = m_fileDownloads.find(id);
+                    if (it == m_fileDownloads.end()) {
+                        return;
+                    }
+                    it->downloading = true;
+                    notifyFileDownload(id);
+                });
         connect(m_mediaRepository.get(), &MediaRepository::downloadProgress, this,
                 [this](const QString &request, qint64 received, qint64 total) {
                     if (!request.startsWith(QStringLiteral("file:"))) {
@@ -98,7 +199,7 @@ MessagingViewModel::MessagingViewModel(
                     }
                     const auto id = request.mid(5);
                     auto it = m_fileDownloads.find(id);
-                    if (it == m_fileDownloads.end() || !it->downloading) {
+                    if (it == m_fileDownloads.end()) {
                         return;
                     }
                     it->downloading = false;
@@ -143,10 +244,32 @@ MessagingViewModel::MessagingViewModel(
         [this](const domain::entity::MessageItem &payload) {
             if (normalizedId(payload.recipient_id) == m_activeConversationId)
                 insertMessage (payload);
+            updateMessageSeningStatus (payload.id, true);
+            qDebug() << "sending id:" << payload.body.message_id;
         }
         );
 
+    connect(m_usecase.get(), &domain::usecase::MessageUsecase::messageSendFinished,
+            this, [this](const QString &messageId, const QString &) {
+                updateMessageSeningStatus(messageId, false);
+            });
+    connect(m_usecase.get(), &domain::usecase::MessageUsecase::messageUpdated,
+            this, [this](const domain::entity::MessageItem &payload) {
+                for (int row = 0; row < m_message.messages.size(); ++row) {
+                    auto &message = m_message.messages[row];
+                    if (message.id == payload.id && message.recipient_id == payload.recipient_id) {
+                        message.body.content = payload.body.content;
+                        emit dataChanged(index(row), index(row),
+                                         {ContentsRole, FilePathRole, FileSizeRole, DownloadedFileRole});
+                        return;
+                    }
+                }
+            });
 
+    connect(m_msgUsecase.get(), &domain::usecase::SendMessageUsecase::fileUploadSettled,
+            this, [this](const QString &id, bool success) {
+                setUploadProgress(id, success ? 1 : m_fileUploads.value(id).progress, false);
+            });
     connect(m_msgUsecase.get (),
             &domain::usecase::SendMessageUsecase::fileUploadStated,
             this,
@@ -163,6 +286,9 @@ MessagingViewModel::MessagingViewModel(
            &domain::usecase::SendMessageUsecase::fileUploadProgress,
            this,
            [this](const QString &id, double progress) {
+                if (!m_fileUploads.value(id).uploading) {
+                    return;
+                }
                 setUploadProgress(id, progress, true);
            });
     connect(m_msgUsecase.get (),
@@ -214,10 +340,10 @@ void MessagingViewModel::requestCall(const QString &receiverId, const QString &u
 void MessagingViewModel::sendMessage(const QString &receiver_id, const QString &msg)
 {
     const QString id = QString(receiver_id).remove(QLatin1Char('-'));
-    m_msgUsecase->execute (id, msg).then(this,
-                                        [this](QString error) {
-
-                                        });
+    // setMessageSending (true);
+    m_msgUsecase->execute(id, msg).then(this, [this](const QString &error) {
+        setMessageSendSuccess(error.isEmpty());
+    });
 }
 
 void MessagingViewModel::sendVoice(qint64 duration)
@@ -367,7 +493,6 @@ void MessagingViewModel::downloadFile(const QString &messageId, int contentIndex
         } else if (!m_mediaRepository) {
             download.error = tr("File download service is unavailable.");
         } else {
-            download.downloading = true;
             notifyFileDownload(transferId);
             m_mediaRepository->downloadFile(QStringLiteral("file:") + transferId, source);
             return;
@@ -444,7 +569,7 @@ void MessagingViewModel::getImageList()
     m_imageUrls.clear();
     for (const auto &message : std::as_const (m_message.messages)) {
         if ( message.body.content.type == domain::entity::MessageType::Image )  {
-            m_imageUrls.append (message.body.content.media_url);
+            m_imageUrls.append(imageDisplayUrl(message).toString());
         }
     }
     emit imageUrlsChanged();
@@ -455,23 +580,92 @@ QStringList MessagingViewModel::imageUrls()
     return m_imageUrls;
 }
 
+
+bool MessagingViewModel::messageSending() const
+{
+    return m_messageSending;
+}
+
+bool MessagingViewModel::messageSendSuccess() const
+{
+    return m_messageSendSuccess;
+}
+void MessagingViewModel::setMessageSending(bool value)
+{
+    if (m_messageSending == value) {
+        return;
+    }
+    m_messageSending = value;
+    emit messageSendingChanged ();
+}
+
+void MessagingViewModel::setMessageSendSuccess(bool value)
+{
+    if (m_messageSendSuccess == value) {
+        return;
+    }
+    m_messageSendSuccess = value;
+    emit messageSendSuccessChanged ();
+}
+
+void MessagingViewModel::updateMessageSeningStatus(const QString &message_id, bool sending)
+{
+    for (int row = 0; row < m_message.messages.size (); row++) {
+        auto &message = m_message.messages[row];
+        if (message.body.message_id != message_id) {
+            continue;
+        }
+        message.sending = sending;
+        const QModelIndex idx = index(row, 0);
+        emit dataChanged(idx, idx, {SendingRole});
+        return;
+    }
+}
 void MessagingViewModel::fetchMessage(QString user_id)
 {
-    const quint64 requestId = ++m_fetchRequestId;
-    const QString conversationId = normalizedId(user_id);
-    if (conversationId != m_activeConversationId) {
+    const quint64 request_id = ++m_fetchRequestId;
+    m_cachedFileUrls.clear();
+    const QString conversation_id = normalizedId(user_id);
+    if (conversation_id != m_activeConversationId) {
         cancelAttachmentUpload();
         m_sendVoiceWhenReady = false;
     }
-    m_voiceController.setConversation(conversationId);
-    m_activeConversationId = conversationId;
+    m_voiceController.setConversation(conversation_id);
+    m_activeConversationId = conversation_id;
     setIsLoading (true);
 
-    m_usecase->execute(user_id, 1).then(
-        this,
-        [this, requestId](domain::entity::MessageResponse messages) {
-            applyFetchedMessages(std::move(messages), requestId);
-        });
+    auto usecase_future = m_usecase->execute (m_activeConversationId, 1);
+    auto *watcher = new QFutureWatcher<domain::entity::MessageResponse>(this);
+
+    connect(watcher,
+            &QFutureWatcher<domain::entity::MessageResponse>::resultReadyAt,
+            this,
+            [this, watcher, request_id](int index) {
+                if (request_id != m_fetchRequestId) {
+                    return;
+                }
+                auto response = watcher->resultAt (index);
+                qDebug() << "VM Response: " << response.total;
+                setIsLoading (false);
+                applyFetchedMessages(std::move(response), request_id);
+
+            }
+            );
+    connect(watcher,
+            &QFutureWatcher<domain::entity::MessageResponse>::finished,
+            this,
+            [ this,watcher, request_id]() {
+                if (request_id == m_fetchRequestId) {
+                    setIsLoading(false);
+
+                    if (watcher->future().isCanceled()) {
+                        qWarning() << "Message fetch cancelled";
+                    }
+                }
+
+                watcher->deleteLater();
+            });
+    watcher->setFuture (usecase_future);
 }
 
 void MessagingViewModel::fetchNextMessage()
@@ -486,13 +680,14 @@ void MessagingViewModel::fetchNextMessage()
         return;
     }
 
-    const quint64 requestId = m_fetchRequestId;
-    const int nextPage = m_message.page + 1;
+    const quint64 request_id = m_fetchRequestId;
+    const int next_page = m_message.page + 1;
     setIsLoading (true);
-    m_usecase->execute(m_activeConversationId, nextPage)
+
+    m_usecase->execute(m_activeConversationId, next_page)
         .then(this,
-              [this, requestId, nextPage](domain::entity::MessageResponse response) {
-                  if (requestId != m_fetchRequestId)
+              [this, request_id, next_page](domain::entity::MessageResponse response) {
+                  if (request_id != m_fetchRequestId)
                       return;
 
                   if (response.page < 1) {
@@ -519,15 +714,23 @@ void MessagingViewModel::fetchNextMessage()
                       m_displayDates = displayDates + m_displayDates;
                       m_sections = sections + m_sections;
                       endInsertRows();
+
+                      // beginInsertRows(QModelIndex(), 0, insertedCount - 1);
+                      // for (int i = insertedCount - 1; i >= 0; --i) {
+                      //     m_message.messages.prepend(std::move(response.messages[i]));
+                      //     m_displayDates.prepend(std::move(displayDates[i]));
+                      //     m_sections.prepend(std::move(sections[i]));
+                      // }
+
+                      // endInsertRows();
                   }
 
-                  m_message.page = response.page > 0 ? response.page : nextPage;
+                  m_message.page = response.page > 0 ? response.page : next_page;
                   m_message.limit = response.limit;
                   m_message.total = response.total;
                   m_message.total_pages = response.total_pages;
                   setIsLoading (false);
                   emit olderMessagesLoaded(insertedCount);
-                  // emit messageChanged ();
               });
 }
 
@@ -537,7 +740,9 @@ void MessagingViewModel::resetModel()
     m_sendVoiceWhenReady = false;
     m_voiceController.reset();
     ++m_fetchRequestId;
+    m_cachedFileUrls.clear();
     m_activeConversationId.clear();
+    m_displayedConversationId.clear();
     setIsLoading (true);
     beginResetModel ();
     m_message = {};
@@ -588,7 +793,7 @@ void MessagingViewModel::setUploadProgress(const QString &id, double progress, b
     upload->uploading = uploading;
     for (int row = 0; row < m_message.messages.size(); ++row) {
         if (m_message.messages[row].id == upload->messageId) {
-            emit dataChanged(index(row), index(row), {ContentsRole, UploadProgressRole, IsUploadingRole});
+            emit dataChanged(index(row), index(row), {ContentsRole, FilePathRole, UploadProgressRole, IsUploadingRole});
             return;
         }
     }
@@ -637,8 +842,9 @@ void MessagingViewModel::applyFetchedMessages(
 {
     // A slower request for the previously selected conversation must never
     // replace the messages of the conversation selected after it.
-    if (requestId != m_fetchRequestId)
+    if (requestId != m_fetchRequestId) {
         return;
+    }
 
     QList<QString> displayDates;
     QList<QString> sections;
@@ -650,13 +856,68 @@ void MessagingViewModel::applyFetchedMessages(
         sections.append(sectionForDate(message.body.timestamp));
     }
 
-    beginResetModel ();
-    m_message = std::move (messages);
-    m_displayDates = std::move(displayDates);
-    m_sections = std::move(sections);
-    endResetModel ();
-    setIsLoading (false);
-    emit initialMessagesLoaded();
+    const bool refresh = m_displayedConversationId == m_activeConversationId
+                         && !m_displayedConversationId.isEmpty();
+    if (refresh) {
+        // Reconcile the refresh in place. A reset hides the entire ListView
+        // and restarts its initial reveal after the cached page is visible.
+        for (int row = 0; row < messages.messages.size(); ++row) {
+            const auto &incoming = messages.messages[row];
+            int existing = row;
+            while (existing < m_message.messages.size()
+                   && m_message.messages[existing].id != incoming.id) {
+                ++existing;
+            }
+            if (existing == m_message.messages.size()) {
+                beginInsertRows(QModelIndex(), row, row);
+                m_message.messages.insert(row, incoming);
+                m_displayDates.insert(row, displayDates[row]);
+                m_sections.insert(row, sections[row]);
+                endInsertRows();
+            } else {
+                if (existing != row) {
+                    beginMoveRows(QModelIndex(), existing, existing, QModelIndex(), row);
+                    m_message.messages.move(existing, row);
+                    m_displayDates.move(existing, row);
+                    m_sections.move(existing, row);
+                    endMoveRows();
+                }
+                auto updated = incoming;
+                const auto &previous = m_message.messages[row].body.content;
+                if (updated.body.content.localpath.isEmpty()
+                    && updated.body.content.media_url == previous.media_url) {
+                    updated.body.content.localpath = previous.localpath;
+                }
+                m_message.messages[row] = std::move(updated);
+                m_displayDates[row] = displayDates[row];
+                m_sections[row] = sections[row];
+                emit dataChanged(index(row), index(row));
+            }
+        }
+        if (m_message.messages.size() > messages.messages.size()) {
+            const int first = messages.messages.size();
+            const int count = m_message.messages.size() - first;
+            beginRemoveRows(QModelIndex(), first, m_message.messages.size() - 1);
+            m_message.messages.remove(first, count);
+            m_displayDates.remove(first, count);
+            m_sections.remove(first, count);
+            endRemoveRows();
+        }
+        m_message.page = messages.page;
+        m_message.limit = messages.limit;
+        m_message.total = messages.total;
+        m_message.total_pages = messages.total_pages;
+        setIsLoading(false);
+    } else {
+        beginResetModel();
+        m_message = std::move(messages);
+        m_displayDates = std::move(displayDates);
+        m_sections = std::move(sections);
+        m_displayedConversationId = m_activeConversationId;
+        endResetModel();
+        setIsLoading(false);
+        emit initialMessagesLoaded();
+    }
     emit messageChanged ();
 }
 
@@ -725,7 +986,8 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
         if (QFileInfo(downloaded.toLocalFile()).isFile()) {
             return downloaded;
         }
-        return QFileInfo(content.localpath).isFile() ? QUrl::fromLocalFile(content.localpath) : QUrl();
+        return content.type == domain::entity::MessageType::File
+            ? cachedFileUrl(content.localpath, content.media_url) : QUrl{};
     }
     case DownloadErrorRole:
         return m_fileDownloads.value(messaging.id).error;
@@ -755,7 +1017,9 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
             const auto download = m_fileDownloads.value(transferId);
             QUrl localFile = download.localFile;
             if (!QFileInfo(localFile.toLocalFile()).isFile()) {
-                localFile = QFileInfo(item.localpath).isFile() ? QUrl::fromLocalFile(item.localpath) : QUrl();
+                localFile = item.type == domain::entity::MessageType::File
+                    ? cachedFileUrl(item.localpath, item.media_url)
+                    : (QFileInfo(item.localpath).isFile() ? QUrl::fromLocalFile(item.localpath) : QUrl());
             }
             FileUploadState upload;
             for (const auto &candidate : m_fileUploads) {
@@ -770,7 +1034,7 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
             items.append(QVariantMap{
                 {QStringLiteral("msgType"), static_cast<int>(item.type)},
                 {QStringLiteral("body"), item.text},
-                {QStringLiteral("filePath"), QUrl(item.media_url)},
+                {QStringLiteral("filePath"), imageDisplayUrl(messaging)},
                 {QStringLiteral("fileName"), item.file_name},
                 {QStringLiteral("fileSize"), item.file_size},
                 {QStringLiteral("duration"), item.duration},
@@ -816,7 +1080,7 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
             || content.type == domain::entity::MessageType::Image
             || content.type == domain::entity::MessageType::File
             || content.type == domain::entity::MessageType::Sticker) {
-            return QUrl(content.media_url);
+            return imageDisplayUrl(messaging);
         }
         return "";
     case FileSizeRole:
@@ -826,6 +1090,8 @@ QVariant MessagingViewModel::data(const QModelIndex &index, int role) const
             // return voiceRecordingDurationStr (content.duration);
             return core::utils::voiceRecordingDurationStr (content.duration);
         }
+    case SendingRole:
+        return messaging.sending;
     default:
         return {};
     }
@@ -853,5 +1119,7 @@ QHash<int, QByteArray> MessagingViewModel::roleNames() const
         { FilePathRole, "filePath"},
         { DurationRole, "duration" },
         { FileSizeRole, "fileSize" },
+        { SendingRole, "sending" },
+        { SendingSuccessRole, "sendingSuccess" }
     };
 }

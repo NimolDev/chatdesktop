@@ -46,6 +46,7 @@ public:
      */
     bool save(const QString &value, const QString &logical_name, const QString &secret_key);
     QString getUser(const QString &logical_name, const QString &secret_key);
+    QString read(const QString &logical_name, const QString &secret_key);
 
 
 private:

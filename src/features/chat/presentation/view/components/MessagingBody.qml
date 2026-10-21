@@ -69,6 +69,7 @@ Item {
             resizeContentY = stableContentY
             resizing = true
             appendScroll.stop()
+            wheelScroll.stop()
         }
         resizeContentY += previousHeight - height
         Qt.callLater(restoreResizePosition)
@@ -82,6 +83,7 @@ Item {
     }
 
     function scrollToLatest(animated = true) {
+        wheelScroll.stop()
         followLatest = true
         // The model can notify before ListView has processed the new rows.
         scrollToLatestTimer.animated = animated && listView.animateAppends
@@ -93,6 +95,8 @@ Item {
     ListView {
         id: listView
         objectName: "messageList"
+        // Decode nearby image delegates before they enter the viewport.
+        cacheBuffer: Math.max(1000, height * 2)
 
         property bool animateAppends: false
         anchors.fill: parent
@@ -100,6 +104,9 @@ Item {
         visible: true
         opacity: 0
         enabled: body.initialPositionReady
+        reuseItems: true
+
+
 
         property bool dragSelecting: false
         property bool dragSelectValue: true
@@ -120,15 +127,15 @@ Item {
         // Keep short conversations at the bottom of the chat area. Unlike a
         // BottomToTop ListView, this preserves the normal order of section
         // headers (header first, then its messages).
-        anchors.topMargin: Math.max(
-            0,
-            body.height - contentHeight - bottomMargin
-        )
-        Behavior on anchors.topMargin {
-            enabled: listView.animateAppends && !listView.paginationPending
-                     && !body.resizing && body.model && !body.model.isLoading
-            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
-        }
+        // anchors.topMargin: Math.max(
+        //     0,
+        //     body.height - contentHeight - bottomMargin
+        // )
+        // Behavior on anchors.topMargin {
+        //     enabled: listView.animateAppends && !listView.paginationPending
+        //              && !body.resizing && body.model && !body.model.isLoading
+        //     NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+        // }
 
         add: Transition {
             enabled: listView.animateAppends && !listView.paginationPending
@@ -145,6 +152,7 @@ Item {
             }
         }
 
+
         // bottomMargin: 20
         footer: Item {
                 width: listView.width
@@ -160,6 +168,15 @@ Item {
 
         ScrollBar.vertical: ScrollBar {
             id: verticalScrollBar
+
+            onPressedChanged: {
+                if (pressed) {
+                    wheelScroll.stop()
+                    appendScroll.stop()
+                    scrollToLatestTimer.stop()
+                    body.followLatest = false
+                }
+            }
 
             policy: ScrollBar.AsNeeded
         }
@@ -193,6 +210,7 @@ Item {
                     && !scrollToLatestTimer.running) {
                 scrollToLatestTimer.stop()
                 body.followLatest = false
+                wheelScroll.stop()
                 capturePaginationAnchor()
                 paginationPending = true
                 body.model.fetchNextMessage()
@@ -330,7 +348,7 @@ Item {
             if (!body.resizing && body.height === body.previousBodyHeight) {
                 body.stableContentY = contentY
             }
-            if (verticalScrollBar.pressed) {
+            if (verticalScrollBar.pressed || wheelScroll.running) {
                 requestOlderMessages()
             }
             const distantFromBottom = (contentY - maximumContentY) <= -200
@@ -347,6 +365,7 @@ Item {
             }
 
             function onModelAboutToBeReset() {
+                wheelScroll.stop()
                 body.initialLoadComplete = false
                 body.prepareInitialMessages()
                 body.followLatest = false
@@ -567,19 +586,39 @@ Item {
                 lastItem = null
                 dragDirection = 0
             }
-            // wheel scrolling
+            // Trackpads already provide smooth pixel deltas, including momentum.
+            // Only discrete mouse-wheel steps need interpolation.
             onWheel: wheel => {
-                         body.followLatest = false
-                         appendScroll.stop()
-                         scrollToLatestTimer.stop()
-                         listView.contentY = listView.clampContentY(
-                             listView.contentY - wheel.angleDelta.y
-                             )
-                         listView.requestOlderMessages()
-                         verticalScrollBar.active = true
-                         scrollIndicatorTimer.restart()
-                         wheel.accepted = true
+                if (wheel.pixelDelta.y === 0 && wheel.angleDelta.y === 0) {
+                    wheel.accepted = false
+                    return
+                }
+                body.followLatest = false
+                appendScroll.stop()
+                scrollToLatestTimer.stop()
+                if (wheel.pixelDelta.y !== 0) {
+                    wheelScroll.stop()
+                    listView.contentY = listView.clampContentY(
+                        listView.contentY - wheel.pixelDelta.y)
+                } else {
+                    const delta = -wheel.angleDelta.y / 120 * 60
+                    // Accumulate rapid steps, but reverse immediately when the
+                    // user changes direction instead of finishing the old motion.
+                    const remaining = wheelScroll.to - listView.contentY
+                    const start = wheelScroll.running && remaining * delta > 0
+                                ? wheelScroll.to : listView.contentY
+                    wheelScroll.stop()
+                    wheelScroll.from = listView.contentY
+                    wheelScroll.to = listView.clampContentY(start + delta)
+                    if (Math.abs(wheelScroll.to - wheelScroll.from) > 0.01) {
+                        wheelScroll.start()
                     }
+                }
+                listView.requestOlderMessages()
+                verticalScrollBar.active = true
+                scrollIndicatorTimer.restart()
+                wheel.accepted = true
+            }
         }
     }
     Rectangle {
@@ -668,6 +707,15 @@ Item {
             }
         }
     }
+    NumberAnimation {
+        id: wheelScroll
+        target: listView
+        property: "contentY"
+        duration: 140
+        easing.type: Easing.OutCubic
+        onFinished: listView.requestOlderMessages()
+    }
+
     NumberAnimation {
         id: appendScroll
         target: listView

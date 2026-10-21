@@ -60,6 +60,7 @@ Page {
     function showConversation(index, userName, userId) {
         const switchId = ++d.switchId
         incomingReveal.stop()
+        // MessagingViewModel.resetModel()
 
         function activateConversation() {
             if (switchId !== d.switchId)
@@ -217,7 +218,6 @@ Page {
                 }
             }
         }
-
     }
 
     Popup {
@@ -428,8 +428,7 @@ Page {
 
             opacity: 0
             active: d.itemSelectedIndex !== -1
-            sourceComponent: Component {
-                ListMessaging {
+            sourceComponent: ListMessaging {
                     id: messagingView
 
                     // anchors.fill: parent
@@ -463,7 +462,6 @@ Page {
                         }
                     }
                 }
-            }
         }
 
 

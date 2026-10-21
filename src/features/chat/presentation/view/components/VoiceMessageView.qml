@@ -19,7 +19,7 @@ Item {
     property string msg: "0"
     property string date: "0"
     property bool selected: false
-    property var fileLocation
+    property url fileLocation
     property var duration: "0"
     property string messageId: ""
     property real uploadProgress: 0
@@ -36,7 +36,9 @@ Item {
                                            ? messagingViewModel.voiceController
                                            : null
     readonly property bool activePlayback: voiceController
-                                           && voiceController.voicePlaybackSource.toString() === String(root.fileLocation)
+                                           && (root.messageId.length > 0
+                                               ? voiceController.voicePlaybackMessageId === root.messageId
+                                               : voiceController.voicePlaybackSource.toString() === root.fileLocation.toString())
     readonly property bool playing: activePlayback && voiceController.voicePlaybackPlaying
 
     Bubble {
@@ -84,7 +86,7 @@ Item {
                     progress: root.activePlayback ? root.voiceController.voiceDownloadProgress : 0
                     onClicked: {
                         if (root.voiceController) {
-                            root.voiceController.playVoice(root.fileLocation)
+                            root.voiceController.playVoice(root.fileLocation, root.messageId)
                             console.log("File path: ", root.fileLocation)
                         }
                     }
@@ -123,7 +125,7 @@ Item {
                     Text {
                         id: durationText
 
-                        text: root.duration
+                        text: root.activePlayback ? root.voiceController.voicePlaybackDurationText : root.duration
                         color: Colors.black500
                         font.family: Typography.family
                         font.pixelSize: Typography.caption
@@ -223,7 +225,7 @@ Item {
                                 root.messagingViewModel.cancelFileUpload(root.messageId, 0)
                             }
                         } else if (root.voiceController) {
-                            root.voiceController.playVoice(root.fileLocation)
+                            root.voiceController.playVoice(root.fileLocation, root.messageId)
                         }
                     }
                 }
@@ -258,7 +260,7 @@ Item {
                               ? (root.uploadProgress > 0
                                  ? qsTr("Uploading %1%").arg(Math.round(root.uploadProgress * 100))
                                  : qsTr("Queued…"))
-                              : root.duration
+                              : root.activePlayback ? root.voiceController.voicePlaybackDurationText : root.duration
                         color: Colors.textPrimary
                         font.family: Typography.family
                         font.pixelSize: Typography.caption

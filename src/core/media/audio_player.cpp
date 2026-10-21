@@ -1,3 +1,4 @@
+#include "storage/media_cache.hpp"
 #include "audio_player.hpp"
 
 #include <algorithm>
@@ -32,7 +33,17 @@ void AudioPlayer::setSource(const QUrl &source)
         return;
     }
     stop();
-    m_player.setSource(source);
+    m_player.setSource(QUrl());
+    m_cachedAudio.close();
+    m_cachedAudio.setData(QByteArray());
+    if (source.isLocalFile() && core::storage::MediaCache::isCachePath(source.toLocalFile())) {
+        m_cachedAudio.setData(core::storage::MediaCache::read(source.toLocalFile()));
+        if (!m_cachedAudio.data().isEmpty() && m_cachedAudio.open(QIODevice::ReadOnly)) {
+            m_player.setSourceDevice(&m_cachedAudio, source);
+        }
+    } else {
+        m_player.setSource(source);
+    }
 }
 
 void AudioPlayer::setPosition(qint64 position)

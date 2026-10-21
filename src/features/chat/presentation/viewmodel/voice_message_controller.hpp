@@ -56,6 +56,7 @@ public:
 public:
     Q_PROPERTY(bool voiceDownloading READ voiceDownloading NOTIFY voicePlaybackChanged)   
     Q_PROPERTY(double voiceDownloadProgress READ voiceDownloadProgress NOTIFY voicePlaybackChanged)   
+    Q_PROPERTY(QString voicePlaybackMessageId READ voicePlaybackMessageId NOTIFY voicePlaybackChanged)
     Q_PROPERTY(QUrl voicePlaybackSource READ voicePlaybackSource NOTIFY voicePlaybackChanged)   
     Q_PROPERTY(bool voicePlaybackPlaying READ voicePlaybackPlaying NOTIFY voicePlaybackChanged)   
     Q_PROPERTY(bool voicePlaybackSeekable READ voicePlaybackSeekable NOTIFY voicePlaybackChanged)    
@@ -74,7 +75,7 @@ public:
 
 
 
-    Q_INVOKABLE void playVoice(const QUrl &source);
+    Q_INVOKABLE void playVoice(const QUrl &source, const QString &messageId = {});
     Q_INVOKABLE void pauseVoice();
     Q_INVOKABLE void resumeVoice();
     Q_INVOKABLE void seekVoice(qint64 position);
@@ -87,6 +88,7 @@ public:
 
     bool voiceDownloading() const { return !m_pendingVoiceMessage.isEmpty(); }
     double voiceDownloadProgress() const { return m_voiceDownloadProgress; }
+    QString voicePlaybackMessageId() const { return m_voicePlaybackMessageId; }
     QUrl voicePlaybackSource() const { return m_voicePlaybackSource; }
     bool voicePlaybackPlaying() const { return m_messagePlayback.playbackState() == QMediaPlayer::PlayingState; }
     bool voicePlaybackSeekable() const { return m_messagePlayback.isSeekable(); }
@@ -125,6 +127,7 @@ signals:
 
 
 private:
+    void stopCurrentAudio();
     void setVoiceRecordingError(const QString &message);
     void setIsInPlay(bool value);
 
@@ -133,6 +136,7 @@ private:
     QString m_activeConversationId;
     std::shared_ptr<domain::repository::MediaRepository> m_mediaRepository;
     QUrl m_voicePlaybackSource;
+    QString m_voicePlaybackMessageId;
     QString m_pendingVoiceMessage;
     QString m_voiceDownloadError;
     double m_voiceDownloadProgress = 0;

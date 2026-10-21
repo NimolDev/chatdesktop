@@ -143,6 +143,13 @@ int main(int argc, char *argv[])
                      []() {
                          qDebug() << "Network disconnected";
                      });
+    network_monitor.setMaximumRetry (10);
+    QObject::connect (&network_monitor,
+                     &core::network::NetworkMonitor::retryCountDownChanged,
+                     [](int value) {
+                         qDebug() << "Retry count down: " << value;
+                     }
+                     );
 
 #ifdef QT_NO_DEBUG
     const QString instanceLockPath = QDir(

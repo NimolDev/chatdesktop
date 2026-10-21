@@ -24,6 +24,8 @@ public:
 signals:
     void onMessagedReceived(const domain::entity::MessageItem &payload);
     void messageSent(const domain::entity::MessageItem &payload);
+    void messageUpdated(const domain::entity::MessageItem &payload);
+    void messageSendFinished(const QString &messageId, const QString &error);
 
 private:
     std::shared_ptr<domain::repository::MessageRepository> m_repository;

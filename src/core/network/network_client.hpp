@@ -37,7 +37,7 @@ public:
     QFuture<NetworkResponse> send(NetworkRequest request);
 
     [[nodiscard]]
-    QFuture<NetworkResponse> get(const QString &path, QUrlQuery query = {});
+    QFuture<NetworkResponse> get( const QString &path,const int retry = 1, QUrlQuery query = {});
 
     [[nodiscard]]
     QFuture<NetworkResponse> post(

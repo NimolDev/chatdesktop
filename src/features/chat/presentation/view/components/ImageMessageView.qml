@@ -49,17 +49,26 @@ Item {
     readonly property int padding: AppLayouts.m_padding
     readonly property real availableBubbleWidth: Math.max(0, Math.min(maxBubbleWidth, width))
     readonly property real imageAspectRatio: tile.aspectRatio
-    readonly property real imageHorizontalPadding: padding * 3.5
-    readonly property real sizedBubbleWidth: imageAspectRatio > 0 && imageAspectRatio < 1
+    readonly property real imageHorizontalPadding: 12
+    property real loadedAspectRatio: 0
+    onMessageIdChanged: loadedAspectRatio = 0
+    readonly property real sizedBubbleWidth: imageAspectRatio > 0
         ? Math.min(availableBubbleWidth, maxImageHeight * imageAspectRatio + imageHorizontalPadding)
         : availableBubbleWidth
     readonly property bool isCollapsedMessage: width > AppLayouts.width
+
+
+    opacity: photo.status == Image.Ready || Image.Error
+    onFileLocationChanged: {
+        // console.log("file localtion: ", fileLocation)
+    }
 
     Bubble {
         id: bubble
 
         width: root.sizedBubbleWidth
-         height: content.implicitHeight
+
+        height: content.implicitHeight
 
         states: [
             State {
@@ -88,17 +97,18 @@ Item {
 
         ColumnLayout {
             id: content
-            x: 0
+            x: root.isOutgoing ? 0 : bubble.width - width
             y: 0
-            width: Math.max(0, bubble.width - 12)
+            width: Math.max(0, bubble.width - root.imageHorizontalPadding)
 
             spacing: root.padding
+
 
             Item {
                 id: tile
                 objectName: "imageTile"
-                readonly property real aspectRatio: photo.status === Image.Ready && photo.implicitHeight > 0
-                                                    ? photo.implicitWidth / photo.implicitHeight : 0
+                readonly property real aspectRatio: root.loadedAspectRatio > 0 ? root.loadedAspectRatio
+                    : root.fileData ? (root.fileData.imageAspectRatio ?? 0) : 0
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 1
@@ -109,16 +119,32 @@ Item {
 
                 clip: true
 
+
                 Image {
                     id: photo
+                    objectName: "messagePhoto"
                     anchors.fill: parent
-                    source: root.imageSource
-                    asynchronous: true
+
+                    // Local/decrypted images can supply their dimensions before layout.
+                    asynchronous: String(root.imageSource).startsWith("http")
+                    retainWhileLoading: true
                     cache: true
                     fillMode: Image.PreserveAspectFit
                     autoTransform: true
+
                     sourceSize.width: 800
                     sourceSize.height: 800
+
+                    source: root.imageSource
+                    onStatusChanged: {
+                        if (status === Image.Ready && implicitHeight > 0) {
+                            root.loadedAspectRatio = implicitWidth / implicitHeight
+                            if (root.mediaControl && typeof root.mediaControl.rememberImageAspectRatio === "function") {
+                                root.mediaControl.rememberImageAspectRatio(root.messageId, root.loadedAspectRatio)
+                            }
+                        }
+                    }
+
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         maskEnabled: true
@@ -127,20 +153,24 @@ Item {
                 }
 
                 DownloadCircleButton {
+                    objectName: "imageUploadButton"
                     width: 50
                     height: 50
                     z: 2
                     anchors.centerIn: parent
+                    visible: root.isUploading
+                    enabled: !root.selectionMode && root.mediaControl !== null
                     backgroundColor: "transparent"
                     iconSource: AppAssets.icClose
                     iconColor: Colors.white50
                     progressColor: Colors.white50
                     strokeWidth: 3
-                    progress: 0.01
-                    downloading: true
+                    progress: root.uploadProgress
+                    downloading: root.isUploading
                     onClicked: {
-                        console.log("MessageId: ", root.messageId,
-                                    "ContentIndex: ", root.contentIndex)
+                        if (root.isUploading && root.mediaControl) {
+                            root.mediaControl.cancelFileUpload(root.messageId, root.contentIndex)
+                        }
                     }
 
                 }
@@ -159,7 +189,7 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !root.selectionMode && photo.status === Image.Ready
+                    enabled: !root.selectionMode && !root.isUploading && photo.status === Image.Ready
                     cursorShape: Qt.PointingHandCursor
                     onClicked:  {
                         ImageViewCoordinator.open(root.imageSource)
@@ -182,6 +212,8 @@ Item {
 
             Text {
                 Layout.fillWidth: true
+                Layout.leftMargin: root.padding
+                Layout.rightMargin: root.padding
                 visible: text.length > 0
                 text: root.msg
                 textFormat: Text.PlainText

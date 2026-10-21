@@ -68,7 +68,7 @@ add_executable(test_media_download test_media_download.cpp ${voice_duration_sour
     ../../src/features/chat/data/repository/media_repository_impl.cpp
     ../../src/core/network/http_download_service.cpp
     ../../src/core/network/http_download_service.hpp
-    ../../src/core/storage/media_cache.cpp)
+)
 target_include_directories(test_media_download PRIVATE
     ../../src/core ../../src/features/chat ../../src/features/chat/domain)
 target_link_libraries(test_media_download PRIVATE
@@ -97,3 +97,17 @@ target_include_directories(test_voice_upload_queue PRIVATE
 target_link_libraries(test_voice_upload_queue PRIVATE
     Qt6::Core Qt6::Multimedia Qt6::Qml Qt6::Test)
 add_test(NAME VoiceUploadQueue COMMAND test_voice_upload_queue)
+
+# Shared encrypted cache used by both image delegates and voice playback.
+find_package(Threads REQUIRED)
+add_subdirectory(../../third_party/openssl bundled_openssl)
+add_library(media_cache_test_backend STATIC
+    cache_test_constants.cpp
+    ../../src/core/storage/media_cache.cpp
+    ../../src/core/storage/local_storage.cpp)
+target_include_directories(media_cache_test_backend PRIVATE ../../src/core ../../src/core/constants)
+target_link_libraries(media_cache_test_backend PUBLIC Qt6::Core OpenSSL::Crypto Threads::Threads)
+foreach(target test_messaging_voice test_voice_duration audio_player_test_backend audio_qml_runner
+        test_media_download test_attachment_upload test_multiple_files test_voice_upload_queue)
+    target_link_libraries(${target} PUBLIC media_cache_test_backend)
+endforeach()

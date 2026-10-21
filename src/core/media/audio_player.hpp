@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAudioOutput>
+#include <QBuffer>
 #include <QMediaPlayer>
 #include <QObject>
 #include <QUrl>
@@ -55,6 +56,7 @@ signals:
 
 private:
     // The player is destroyed first, while its output is still alive.
+    QBuffer m_cachedAudio;
     QAudioOutput m_output;
     QMediaPlayer m_player;
 };

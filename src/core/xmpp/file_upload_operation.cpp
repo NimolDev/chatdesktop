@@ -1,6 +1,7 @@
 #include "file_upload_operation.hpp"
 
 #include <QNetworkReply>
+#include <QNetworkInformation>
 #include <QTimer>
 
 namespace core {
@@ -14,6 +15,17 @@ FileUploadOperation::FileUploadOperation(
     connect(&m_watcher, &QFutureWatcher<UploadedFile>::canceled,
             this, [this] { cancel(); });
     m_watcher.setFuture(m_promise->future());
+    if (auto *network = QNetworkInformation::instance()) {
+        connect(network, &QNetworkInformation::reachabilityChanged, this,
+                [this](QNetworkInformation::Reachability reachability) {
+            if (reachability == QNetworkInformation::Reachability::Disconnected) {
+                finish({{}, tr("Connection lost during upload. Reconnect and retry.")});
+            }
+        });
+        if (network->reachability() == QNetworkInformation::Reachability::Disconnected) {
+            finish({{}, tr("No network connection. Reconnect and retry.")});
+        }
+    }
     QTimer::singleShot(120000, this, [this] {
         finish({{}, tr("File upload timed out. Please retry.")});
     });
@@ -47,6 +59,25 @@ bool FileUploadOperation::isStopped() const
     return m_done || m_promise->isCanceled();
 }
 
+bool FileUploadOperation::openData(const QByteArray &bytes)
+{
+    if (isStopped()) {
+        return false;
+    }
+    if (bytes.isEmpty()) {
+        finish({{}, tr("Cached upload is missing or unreadable.")});
+        return false;
+    }
+    m_buffer.setData(bytes);
+    m_source = &m_buffer;
+    return m_buffer.open(QIODevice::ReadOnly);
+}
+
+qint64 FileUploadOperation::size() const
+{
+    return m_source->size();
+}
+
 void FileUploadOperation::stopTransport()
 {
     if (m_reply && m_reply->isRunning()) {
@@ -54,6 +85,7 @@ void FileUploadOperation::stopTransport()
         m_reply->abort();
     }
     m_file.close();
+    m_buffer.close();
 }
 
 void FileUploadOperation::cancel()
@@ -88,12 +120,12 @@ void FileUploadOperation::put(const QNetworkRequest &request, const QUrl &downlo
         return;
     }
     // Report the initial state before Qt emits its first batched byte update.
-    progress(100, m_file.size());
+    progress(0, size());
     if (isStopped()) {
         return;
     }
     m_network.setTransferTimeout(60000);
-    m_reply = m_network.put(request, &m_file);
+    m_reply = m_network.put(request, m_source);
     connect(m_reply, &QNetworkReply::uploadProgress, this,
             [this, progress](qint64 sent, qint64 total) {
         if (!isStopped()) {

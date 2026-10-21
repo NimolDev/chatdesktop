@@ -3,6 +3,8 @@
 #include "domain/repository/media_repository.hpp"
 #include "network/http_download_service.hpp"
 #include <QHash>
+#include <QTemporaryFile>
+#include <memory>
 
 namespace data {
 namespace repository {
@@ -20,6 +22,8 @@ private:
         QUrl url;
         QString path;
         QString accountId;
+        QString cachePath;
+        std::shared_ptr<QTemporaryFile> temporary;
     };
     QString takeMessage(const QString &requestId);
     core::network::HttpDownloadService m_downloads;

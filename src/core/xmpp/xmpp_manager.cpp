@@ -1,3 +1,4 @@
+#include "storage/media_cache.hpp"
 #include "xmpp_manager.hpp"
 
 
@@ -212,11 +213,7 @@ void XmppManager::initializeHandlers()
     if (!m_roster) {
         qWarning() << "QXmppRosterManager not available";
     }
-    // m_discovery = std::make_unique<core::xmpp::XmppServiceDiscovery> (m_client, this);
-    // connect(m_discovery.get (),
-    //         &core::xmpp::XmppServiceDiscovery::externalServiceReceived,
-    //         this,
-    //         &XmppManager::externalServiceReceived);
+
 }
 
 void XmppManager::initializeSignals()
@@ -330,6 +327,9 @@ void XmppManager::initializeSignals()
     //     }
     //     );
 
+    // connect(
+    //     m_client,
+    //     // &QXmppClient::)
     connect(
         m_client,
         &QXmppClient::messageReceived,
@@ -539,7 +539,9 @@ QFuture<UploadedFile> XmppManager::fileUpload(const QString &id,const QString &f
             return;
         }
         auto *operation = new FileUploadOperation(promise, this);
-        if (!operation->open(info.absoluteFilePath())) {
+        const bool encrypted = core::storage::MediaCache::isCachePath(info.absoluteFilePath());
+        const auto bytes = encrypted ? core::storage::MediaCache::read(info.absoluteFilePath()) : QByteArray();
+        if (!(encrypted ? operation->openData(bytes) : operation->open(info.absoluteFilePath()))) {
             return;
         }
         const auto complete = [operation](const UploadedFile &result) {
@@ -552,14 +554,15 @@ QFuture<UploadedFile> XmppManager::fileUpload(const QString &id,const QString &f
          * Request the XMPP slot seperately: the application's HTTP transport
          * Suppot local delvelopment server
          */
-        const auto mimType = QMimeDatabase().mimeTypeForFile (info);
+        const auto mimType = encrypted ? QMimeDatabase().mimeTypeForData(bytes)
+                                       : QMimeDatabase().mimeTypeForFile(info);
         // const QString file_name = QUuid::createUuid ().toString (QUuid::WithoutBraces)
         //                           + "." + info.suffix ();
 
-        const QString file_name = info.fileName ();
+        const QString file_name = encrypted ? info.completeBaseName() + QStringLiteral(".jpg") : info.fileName();
         request->requestSlot (
             file_name,
-            info.size (),
+            operation->size(),
             mimType,
             services.first ().jid ()
             ).then (operation,

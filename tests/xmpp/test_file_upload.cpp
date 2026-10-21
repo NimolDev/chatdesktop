@@ -2,6 +2,7 @@
 
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QNetworkInformation>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -56,6 +57,24 @@ class FileUploadTest : public QObject
     }
 
 private slots:
+    void connectionLossStopsUpload()
+    {
+        if (!QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability)) {
+            QSKIP("No reachability backend available");
+        }
+        auto upload = create();
+        put(upload);
+        auto *network = QNetworkInformation::instance();
+        QVERIFY(QMetaObject::invokeMethod(network, "reachabilityChanged", Qt::DirectConnection,
+                                         Q_ARG(QNetworkInformation::Reachability,
+                                               QNetworkInformation::Reachability::Disconnected)));
+        QTRY_VERIFY(upload.future.isFinished());
+        QVERIFY(!upload.future.isCanceled());
+        QVERIFY(!upload.future.result().error.isEmpty());
+        QVERIFY(upload.future.result().url.isEmpty());
+        QTRY_VERIFY(upload.operation.isNull());
+    }
+
     void progressStartsAtZero()
     {
         auto upload = create();

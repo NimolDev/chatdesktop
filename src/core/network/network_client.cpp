@@ -64,6 +64,7 @@ QFuture<NetworkResponse> NetworkClient::send(NetworkRequest request)
         request.request_id = createRequestId ();
     }
 
+
     applyRequestInterceptors (request);
 
     if (!request.isValid ()) {
@@ -90,13 +91,13 @@ QFuture<NetworkResponse> NetworkClient::send(NetworkRequest request)
     return future;
 }
 
-QFuture<NetworkResponse> NetworkClient::get(const QString &path, QUrlQuery query)
+QFuture<NetworkResponse> NetworkClient::get(const QString &path, const int retry, QUrlQuery query)
 {
     NetworkRequest request;
     request.url = QUrl(path);
     request.method = HttpMethod::Get;
     request.query = std::move (query);
-
+    request.retry_policy.maximum_retries = qMax(0, retry);;
     return send(std::move (request));
 }
 
@@ -310,7 +311,6 @@ QNetworkRequest NetworkClient::buildQtRequest(const NetworkRequest &request)
     }
     return qtRequest;
 }
-
 
 QNetworkReply *NetworkClient::dispatch(const NetworkRequest &request, const QNetworkRequest &qt_request)
 {

@@ -2,6 +2,7 @@
 #define CORE_XMPP_FILE_UPLOAD_OPERATION_HPP
 
 #include <QFile>
+#include <QBuffer>
 #include <QFuture>
 #include <QFutureWatcher>
 #include <QNetworkAccessManager>
@@ -29,6 +30,8 @@ public:
     ~FileUploadOperation() override;
 
     bool open(const QString &path);
+    bool openData(const QByteArray &bytes);
+    qint64 size() const;
     bool isStopped() const;
     void put(const QNetworkRequest &request, const QUrl &downloadUrl,
              std::function<void(qint64, qint64)> progress);
@@ -41,6 +44,8 @@ private:
     std::shared_ptr<QPromise<UploadedFile>> m_promise;
     QFutureWatcher<UploadedFile> m_watcher;
     QFile m_file;
+    QBuffer m_buffer;
+    QIODevice *m_source = &m_file;
     QNetworkAccessManager m_network;
     QPointer<QNetworkReply> m_reply;
     bool m_done = false;

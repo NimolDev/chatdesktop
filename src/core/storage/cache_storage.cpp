@@ -6,6 +6,7 @@
 #include <QString>
 #include <QDebug>
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
 
 
@@ -41,32 +42,58 @@ CacheStorage::CacheStorage()
 
 bool CacheStorage::save(const QString &value, const QString &logical_name, const QString &secret_key)
 {
-    // TODO: Serialize value and persist it using LocalStorage.
-
     const QString file = QDir(m_storagePath).filePath(FileNameHelper::hexName(logical_name, secret_key));
-    qDebug() << "File cache location: " << file;
-    // m_storage = std::make_unique<LocalStorage>(
-    //     file.toStdString(), constants::AppConstants::appSecretKey().toStdString());
-    m_storage->setPath (file.toStdString (), constants::AppConstants::appSecretKey ().toStdString ());
-    m_storage->insert(value.toStdString (), USER);
-
+    m_storage->setPath(file.toStdString(), constants::AppConstants::appSecretKey().toStdString());
+    const auto records = m_storage->ids(USER);
+    if (records.empty()) {
+        m_storage->insert(value.toStdString(), USER);
+    } else {
+        if (!m_storage->update(records.back(), value.toStdString())) {
+            return false;
+        }
+        // Older versions appended snapshots. Retain only the latest one.
+        for (const auto id : records) {
+            if (id != records.back()) {
+                m_storage->remove(id);
+            }
+        }
+    }
+    m_storage->sync();
     return true;
 }
+
 QString CacheStorage::getUser(const QString &logical_name, const QString &secret_key)
 {
     const QString file = QDir(m_storagePath).filePath(FileNameHelper::hexName(logical_name, secret_key));
-    qDebug() << "File cache location: " << file;
-    m_storage->setPath (file.toStdString (), constants::AppConstants::appSecretKey ().toStdString ());
-
-    auto user = m_storage->ids (USER);
-    if (!user.empty ()) {
-        qDebug() << "User:" << user;
-        auto v = m_storage->get (user[0]);
-        if (v) {
-            qDebug() << "User: " << *v;
+    if (!QFileInfo::exists(file)) {
+        return {};
+    }
+    m_storage->setPath(file.toStdString(), constants::AppConstants::appSecretKey().toStdString());
+    const auto records = m_storage->ids(USER);
+    if (!records.empty()) {
+        const auto value = m_storage->get(records.back());
+        if (value) {
+            return QString::fromStdString(*value);
         }
     }
-    return "";
+    return {};
+}
+
+QString CacheStorage::read(const QString &logical_name, const QString &secret_key)
+{
+    const QString file = QDir(m_storagePath).filePath(FileNameHelper::hexName(logical_name, secret_key));
+    if (!QFileInfo::exists(file)) {
+        return {};
+    }
+    m_storage->setPath(file.toStdString(), constants::AppConstants::appSecretKey().toStdString());
+    const auto records = m_storage->ids(USER);
+    if (!records.empty()) {
+        const auto value = m_storage->get(records.back());
+        if (value) {
+            return QString::fromStdString(*value);
+        }
+    }
+    return {};
 }
 
 

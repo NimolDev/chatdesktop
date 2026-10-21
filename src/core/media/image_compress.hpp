@@ -13,10 +13,10 @@ public:
         const QString &input, const QString &output,
         int maxWidth = 1920, int maxHeight = 1920, int quality = 85);
 
-    // Returns the cached local path, or an empty string if compression fails.
+    // Returns an encrypted MediaCache path; no plaintext JPEG is written to disk.
     static QFuture<QString> compressImageToCache(
         const QString &input, const QString &messageId,
-        int maxWidth = 1920, int maxHeight = 1920, int quality = 85);
+         const QString &account = {}, int maxWidth = 1920, int maxHeight = 1920, int quality = 85);
 };
 
 } // namespace media

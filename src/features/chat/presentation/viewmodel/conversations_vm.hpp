@@ -43,7 +43,7 @@ signals:
     void isLoadingChanged();
 private:
     void onFinished();
-    bool m_isLoading;
+    bool m_isLoading = false;
 private:
 
 

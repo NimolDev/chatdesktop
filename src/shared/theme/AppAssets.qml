@@ -47,5 +47,6 @@ QtObject {
     readonly property url icTrash: "qrc:/icons/trash.png"
     readonly property url icDocument: "qrc:/icons/document.fill.png"
     readonly property url icArrowDown: "qrc:/icons/arrow.down.png"
+    readonly property url icClock: "qrc:/icons/clock.png"
 
 }

@@ -25,6 +25,33 @@ TestCase {
         messages.isLoading = true
         messages.clear()
     }
+    function test_visibleRefreshKeepsListAndScrollPosition() {
+        const body = createTemporaryObject(factory, testCase)
+        const list = findChild(body, "messageList")
+        for (let i = 0; i < 60; ++i) {
+            messages.append({body: "Message " + i, sentAt: "", isMine: true,
+                             msgType: 0, filePath: "", duration: 0, seen: true, section: "Today"})
+        }
+        messages.isLoading = false
+        messages.initialMessagesLoaded()
+        tryCompare(list, "opacity", 1)
+        body.followLatest = false
+        list.positionViewAtIndex(30, ListView.Beginning)
+        wait(50)
+        const position = list.contentY
+        const delegate = list.itemAtIndex(30)
+        messages.isLoading = true
+        for (let row = 0; row < messages.count; ++row) {
+            messages.setProperty(row, "seen", false)
+        }
+        messages.isLoading = false
+        wait(50)
+        compare(list.opacity, 1)
+        verify(body.initialPositionReady)
+        compare(list.itemAtIndex(30), delegate)
+        fuzzyCompare(list.contentY, position, 1)
+    }
+
     function test_initialReveal_data() {
         return [{tag: "empty", count: 0}, {tag: "short", count: 2}, {tag: "long", count: 60}]
     }

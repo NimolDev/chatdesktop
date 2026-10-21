@@ -51,6 +51,8 @@ struct MessageItem
     Payload body;
     QString sent_at;
     bool is_mine;
+    bool sending;
+    bool send_success;
 };
 
 struct MessageResponse

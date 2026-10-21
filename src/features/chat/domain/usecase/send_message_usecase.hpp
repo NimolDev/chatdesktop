@@ -31,6 +31,7 @@ signals:
     void fileUploadProgress(const QString &id, double progress);
     void fileUploadFinish(const QString &id);
     void fileUploadCanceled(const QString &id);
+    void fileUploadSettled(const QString &id, bool success);
 
 private:
    std::shared_ptr<domain::repository::MessageRepository> m_repository;

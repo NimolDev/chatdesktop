@@ -61,8 +61,6 @@ private:
     std::shared_ptr<core::xmpp::XmppManager> m_xmpp;
     QString m_currentUserId;
 
-
-
     struct SendQueueEntry
     {
         std::function<QFuture<QString>()> start;
@@ -76,6 +74,7 @@ private:
                              domain::repository::UploadCancellationPtr cancellation = {},
                              std::shared_ptr<FileUploadTask> task = {});
     QFuture<QString> sendMessageNow(domain::entity::Payload payload);
+
     void nextProcess();
     bool m_processing = false;
 

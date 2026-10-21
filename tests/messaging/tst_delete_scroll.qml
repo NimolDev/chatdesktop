@@ -61,6 +61,36 @@ TestCase {
         verify(Math.abs(last.mapToItem(body, 0, last.height).y - body.height + 16) < 3,
                "Latest message should stay aligned to the bottom")
     }
+    function test_wheelStepsAccumulateAndReverse() {
+        messages.isLoading = true
+        messages.clear()
+        for (let i = 0; i < 80; ++i) {
+            messages.append({body: "Message " + i, sentAt: "", isMine: true,
+                             msgType: 0, filePath: "", seen: true, section: "Today"})
+        }
+        const body = createTemporaryObject(factory, testCase)
+        const list = findChild(body, "messageList")
+        messages.initialMessagesLoaded()
+        tryVerify(() => list.animateAppends)
+        wait(300)
+        messages.isLoading = false
+        body.followLatest = false
+        list.positionViewAtIndex(40, ListView.Beginning)
+        wait(50)
+        const startY = list.contentY
+        mouseWheel(list, 100, 100, 0, 120)
+        verify(Math.abs(list.contentY - startY) < 60,
+               "A wheel step should animate instead of jumping to its destination")
+        mouseWheel(list, 100, 100, 0, 120)
+        tryVerify(() => Math.abs(list.contentY - (startY - 120)) < 2)
+
+        mouseWheel(list, 100, 100, 0, 120)
+        wait(40)
+        const turningY = list.contentY
+        mouseWheel(list, 100, 100, 0, -120)
+        tryVerify(() => Math.abs(list.contentY - (turningY + 60)) < 2)
+    }
+
     function test_wheelAtTopStillFetchesHistory() {
         messages.isLoading = true
         messages.clear()

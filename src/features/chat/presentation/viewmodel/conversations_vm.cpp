@@ -1,6 +1,5 @@
 #include "conversations_vm.hpp"
 
-#include <QTimer>
 
 
 ConversationsVM *ConversationsVM::s_instance = nullptr;
@@ -12,12 +11,18 @@ ConversationsVM::ConversationsVM(
     : m_usecase(std::move (usecase)),
     QAbstractListModel(parent)
 {
-    connect(
-        &m_watcher,
-        &QFutureWatcher<QList<domain::entity::ConversationList>>::finished,
-        this,
-        &ConversationsVM::onFinished
-        );
+    connect(&m_watcher,
+            &QFutureWatcher<QList<domain::entity::ConversationList>>::resultReadyAt,
+            this, [this](int index) {
+                beginResetModel();
+                m_conversations = m_watcher.resultAt(index);
+                endResetModel();
+                m_isLoading = false;
+                emit isLoadingChanged();
+            });
+    connect(&m_watcher,
+            &QFutureWatcher<QList<domain::entity::ConversationList>>::finished,
+            this, &ConversationsVM::onFinished);
 }
 
 ConversationsVM *ConversationsVM::create(QQmlEngine *engine, QJSEngine *scriptEngine)
@@ -38,11 +43,12 @@ void ConversationsVM::setInstance(ConversationsVM *instance)
 
 void ConversationsVM::fetchConversations()
 {
-
-    auto future =  m_usecase->execute ();
-    m_watcher.setFuture (future);
+    if (m_watcher.isRunning()) {
+        m_watcher.cancel();
+    }
     m_isLoading = true;
-    emit isLoadingChanged ();
+    emit isLoadingChanged();
+    m_watcher.setFuture(m_usecase->execute());
 }
 
 bool ConversationsVM::isLoading() const
@@ -91,21 +97,6 @@ QHash<int, QByteArray> ConversationsVM::roleNames() const
 
 void ConversationsVM::onFinished()
 {
-    auto conversations = m_watcher.result ();
-    QTimer::singleShot (
-        000, // 5s
-        this,
-        [this, conversations = std::move (conversations)]() mutable {
-            beginResetModel ();
-            m_conversations = std::move (conversations);
-            endResetModel ();
-            m_isLoading = false;
-            emit isLoadingChanged ();
-        }
-        );
-
-
-
-
+    m_isLoading = false;
+    emit isLoadingChanged();
 }
-

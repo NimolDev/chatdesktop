@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <algorithm>
+#include <QFileDialog>
 
 namespace data {
 namespace repository {
@@ -27,11 +28,17 @@ MediaRepositoryImpl::MediaRepositoryImpl(QObject *parent)
                 const auto pending = m_requests.value(request);
                 const auto message = takeMessage(request);
                 if (!message.isEmpty()) {
-                    // if (!pending.accountId.isEmpty()
-                    //     && !core::storage::MessageStore::saveMediaPath(pending.accountId, pending.url.toString(), path)) {
-                    //     qWarning() << "Could not save downloaded media path";
-                    // }
-                    emit downloadCompleted(message, path);
+                    if (pending.temporary) {
+                        const bool cached = core::storage::MediaCache::saveFile(pending.cachePath, path);
+                        if (!cached) {
+                            emit downloadFailed(message, tr("Unable to save encrypted media cache."));
+                            return;
+                        }
+                        emit downloadCompleted(message, pending.cachePath);
+                    } else {
+                        core::storage::MediaCache::saveLocalFilePath(pending.url, path, pending.accountId);
+                        emit downloadCompleted(message, path);
+                    }
                 }
             });
     connect(&m_downloads, &HttpDownloadService::downloadFailedChanged, this,
@@ -70,24 +77,21 @@ void MediaRepositoryImpl::downloadFile(const QString &messageId, const QUrl &url
     }
     const auto user = core::storage::UserData::getCurrentUser();
     const QString accountId = user ? QString(user->user_id).remove(QLatin1Char('-')) : QString{};
-    // const QString savedPath = core::storage::MessageStore::localMediaPath(accountId, url.toString());
-    // if (QFileInfo(savedPath).isFile()) {
-    //     emit downloadCompleted(messageId, savedPath);
-    //     return;
-    // }
     // Hash both identity and URL to avoid unsafe filenames and stale URL reuse.
     const auto key = QString::fromLatin1(QCryptographicHash::hash(
         messageId.toUtf8() + '\0' + url.toEncoded(), QCryptographicHash::Sha256).toHex());
     const bool genericFile = messageId.startsWith(QStringLiteral("file:"));
     QString path;
+    QString cachePath = core::storage::MediaCache::filePath(key, QFileInfo(url.path()).suffix(), accountId);
+    std::shared_ptr<QTemporaryFile> temporary;
     if (genericFile) {
-        const QString directory = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-        if (directory.isEmpty() || !QDir().mkpath(directory)) {
-            emit downloadFailed(messageId, tr("Unable to access the Downloads folder."));
+        const auto savedPath = core::storage::MediaCache::localFilePath(url, accountId);
+        if (!savedPath.isEmpty()) {
+            emit downloadStarted(messageId);
+            emit downloadCompleted(messageId, savedPath);
             return;
         }
-        // Keep only the URL's final path component; never allow a remote path
-        // to escape the Downloads directory.
+        // Sanitize only the suggested name; the dialog returns the full destination.
         QString name = QFileInfo(url.path()).fileName();
         name.replace(QLatin1Char('\\'), QLatin1Char('_'));
         for (auto &character : name) {
@@ -98,16 +102,23 @@ void MediaRepositoryImpl::downloadFile(const QString &messageId, const QUrl &url
         if (name.isEmpty() || name == QStringLiteral(".") || name == QStringLiteral("..")) {
             name = QStringLiteral("download");
         }
-        const QFileInfo info(name);
-        const QString suffix = info.suffix().isEmpty() ? QString() : QLatin1Char('.') + info.suffix();
-        const QString base = info.completeBaseName();
-        path = QDir(directory).filePath(name);
-        int number = 1;
-        // Also reserve destinations used by concurrent downloads.
-        while (QFileInfo::exists(path) || QFileInfo(path).isSymLink()
-               || std::any_of(m_requests.cbegin(), m_requests.cend(),
-                              [&path](const PendingDownload &pending) { return pending.path == path; })) {
-            path = QDir(directory).filePath(QStringLiteral("%1 (%2)%3").arg(base).arg(number++).arg(suffix));
+        const QString directory = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        path = QFileDialog::getSaveFileName(
+            nullptr, tr("Save File"), QDir(directory).filePath(name), tr("All Files (*)"));
+        if (path.isEmpty()) {
+            return; // User canceled.
+        }
+        path = QFileInfo(path).absoluteFilePath();
+        const QString destinationDirectory = QFileInfo(path).absolutePath();
+        if (!QDir().mkpath(destinationDirectory)) {
+            emit downloadFailed(messageId, tr("Unable to access the folder: %1").arg(destinationDirectory));
+            return;
+        }
+        // Do not let concurrent downloads replace the same destination.
+        if (std::any_of(m_requests.cbegin(), m_requests.cend(),
+                        [&path](const PendingDownload &pending) { return pending.path == path; })) {
+            emit downloadFailed(messageId, tr("A download to this file is already in progress."));
+            return;
         }
     } else {
         // Voice playback continues to use the media cache.
@@ -120,24 +131,28 @@ void MediaRepositoryImpl::downloadFile(const QString &messageId, const QUrl &url
         if (!audioExtensions.contains(extension)) {
             extension = QStringLiteral("bin");
         }
-        path = core::storage::MediaCache::voicePath(key, extension);
-        const QFileInfo cached(path);
-        if (cached.isFile() && cached.size() > 0) {
-            // if (!accountId.isEmpty()) {
-            //     core::storage::MessageStore::saveMediaPath(accountId, url.toString(), path);
-            // }
-            emit downloadCompleted(messageId, path);
+        cachePath = core::storage::MediaCache::voicePath(key, extension, accountId);
+        if (core::storage::MediaCache::exists(cachePath)) {
+            emit downloadCompleted(messageId, cachePath);
             return;
         }
+        temporary = std::make_shared<QTemporaryFile>();
+        if (!temporary->open()) {
+            emit downloadFailed(messageId, tr("Unable to prepare media download."));
+            return;
+        }
+        path = temporary->fileName();
+        temporary->close();
     }
     qDebug() << "Download path" << path;
-    const auto request = m_downloads.download(url, path, !genericFile);
+    const auto request = m_downloads.download(url, path, true);
     if (request.isEmpty()) {
         emit downloadFailed(messageId, tr("Unable to start file download."));
         return;
     }
-    m_requests.insert(request, {messageId, url, path, accountId});
+    m_requests.insert(request, {messageId, url, path, accountId, cachePath, temporary});
     m_messages.insert(messageId, request);
+    emit downloadStarted(messageId);
 }
 
 void MediaRepositoryImpl::cancelDownload(const QString &messageId)

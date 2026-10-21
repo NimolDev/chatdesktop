@@ -83,15 +83,12 @@ VoiceMessageController::VoiceMessageController(
         &AudioPlayer::mediaStatusChanged,
         this,
         [this]() {
+            setIsInPlay (m_messagePlayback.playbackState() == QMediaPlayer::PlayingState);
             emit voicePlaybackChanged();
         }
         );
-    connect(&m_messagePlayback,
-            &AudioPlayer::finished ,
-            this,
-            [this]() {
-                setIsInPlay (false);
-            });
+    // End-of-media updates the controls through mediaStatusChanged; keep the
+    // bar open until explicitly closed so short clips do not resize the list.
     connect(&m_messagePlayback,
             &AudioPlayer::errorChanged,
             this,
@@ -296,7 +293,7 @@ void VoiceMessageController::playVoicePreview()
     m_previewPlayback.togglePlayback();
 }
 
-void VoiceMessageController::playVoice(const QUrl &source)
+void VoiceMessageController::playVoice(const QUrl &source, const QString &messageId)
 {
     if (source.isEmpty()) {
         return;
@@ -304,17 +301,22 @@ void VoiceMessageController::playVoice(const QUrl &source)
 
     m_previewPlayback.stop();
     // setIsInPlay (true);
-    if (source == m_voicePlaybackSource && voiceDownloading()) {
+    const bool sameMessage = !messageId.isEmpty()
+        ? messageId == m_voicePlaybackMessageId : source == m_voicePlaybackSource;
+    if (sameMessage && voiceDownloading()) {
         return;
     }
-    if (source == m_voicePlaybackSource && !m_messagePlayback.source().isEmpty()) {
+    if (sameMessage && !m_messagePlayback.source().isEmpty()
+        && m_messagePlayback.error() == QMediaPlayer::NoError
+        && m_messagePlayback.mediaStatus() != QMediaPlayer::InvalidMedia) {
         setIsInPlay (true);
         m_messagePlayback.togglePlayback();
         return;
     }
-    stopVoicePlayback();
+    stopCurrentAudio();
     m_messagePlayback.setSource(QUrl());
     m_voicePlaybackSource = source;
+    m_voicePlaybackMessageId = messageId;
     m_voiceDownloadError.clear();
     m_voiceDownloadProgress = 0;
 
@@ -359,6 +361,12 @@ void VoiceMessageController::seekVoice(qint64 position)
 
 void VoiceMessageController::stopVoicePlayback()
 {
+    stopCurrentAudio();
+    setIsInPlay(false);
+}
+
+void VoiceMessageController::stopCurrentAudio()
+{
     const auto pending = m_pendingVoiceMessage;
     m_pendingVoiceMessage.clear();
     if (m_mediaRepository && !pending.isEmpty()) {
@@ -366,7 +374,6 @@ void VoiceMessageController::stopVoicePlayback()
     }
     m_messagePlayback.stop();
     emit voicePlaybackChanged();
-    setIsInPlay (false);
 }
 
 
@@ -435,6 +442,7 @@ void VoiceMessageController::reset()
 {
     stopVoicePlayback();
     m_voicePlaybackSource.clear();
+    m_voicePlaybackMessageId.clear();
     m_messagePlayback.setSource(QUrl());
     cancelVoiceRecording();
     m_activeConversationId.clear();

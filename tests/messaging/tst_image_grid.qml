@@ -23,7 +23,7 @@ TestCase {
         for (let i = 0; i < data.count; ++i) {
             contents.push({msgType: 4, filePath: "file:///missing-image-" + i + ".png"})
         }
-        const view = createTemporaryObject(factory, this, {contents: contents})
+        const view = createTemporaryObject(factory, this, {viewmodel: {contents: contents}})
         verify(view)
         compare(String(view.imageSource), contents[0].filePath)
         const tile = findChild(view, "imageTile")
@@ -44,23 +44,46 @@ TestCase {
 
     function test_aspectRatio(data) {
         const view = createTemporaryObject(factory, this, {
-            width: data.width, fileLocation: Qt.resolvedUrl(data.source)
+            width: data.width, viewmodel: {id: data.tag, filePath: Qt.resolvedUrl(data.source)}
         })
-        tryVerify(function() { return view.imageAspectRatio > 0 })
+        tryCompare(findChild(view, "messagePhoto"), "status", Image.Ready)
         const tile = findChild(view, "imageTile")
-        const expectedWidth = data.ratio < 1
-            ? Math.min(data.width, view.maxImageHeight * data.ratio + view.imageHorizontalPadding)
-            : data.width
-        tryVerify(function() { return Math.abs(view.bubbleItem.width - expectedWidth) < 0.1 })
-        tryVerify(function() { return Math.abs(tile.width / tile.height - data.ratio) < 0.01 })
-        if (data.ratio < 1 && data.width === 400) {
-            compare(tile.height, view.maxImageHeight)
-        }
+        tryCompare(view.bubbleItem, "width", Math.min(150, data.width))
+        tryCompare(tile, "height", Math.min(view.maxImageHeight, tile.width))
+        const photo = findChild(view, "messagePhoto")
+        verify(Math.abs(photo.paintedWidth / photo.paintedHeight - data.ratio) < 0.01)
         verify(view.bubbleItem.width <= view.width)
     }
 
+    function test_rememberedDimensionsBeforeLoading() {
+        const view = createTemporaryObject(factory, this, {viewmodel: {
+            id: "cached", filePath: "file:///missing.png", imageAspectRatio: 0.2
+        }})
+        const tile = findChild(view, "imageTile")
+        tryCompare(tile, "height", Math.min(view.maxImageHeight, tile.width))
+    }
+
+    function test_sourceReplacementKeepsGeometry() {
+        const view = createTemporaryObject(factory, this, {viewmodel: {
+            id: "same", filePath: Qt.resolvedUrl("removed.svg")
+        }})
+        tryCompare(findChild(view, "messagePhoto"), "status", Image.Ready)
+        const tile = findChild(view, "imageTile")
+        const height = tile.height
+        const width = view.bubbleItem.width
+        view.viewmodel = {id: "same", filePath: Qt.resolvedUrl("first.svg")}
+        tryCompare(findChild(view, "messagePhoto"), "status", Image.Ready)
+        compare(tile.height, height)
+        compare(view.bubbleItem.width, width)
+        view.viewmodel = {id: "same", filePath: "file:///missing-replacement.png"}
+        compare(tile.height, height)
+        compare(view.bubbleItem.width, width)
+        view.viewmodel = {id: "different", filePath: ""}
+        compare(String(findChild(view, "messagePhoto").source), "")
+    }
+
     function test_legacySingleImage() {
-        const view = createTemporaryObject(factory, this, {fileLocation: "file:///single.png"})
+        const view = createTemporaryObject(factory, this, {viewmodel: {filePath: "file:///single.png"}})
         compare(String(view.imageSource), "file:///single.png")
     }
 }

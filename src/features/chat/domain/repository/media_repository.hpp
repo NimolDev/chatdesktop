@@ -19,6 +19,8 @@ public:
         const QUrl &url) = 0;
     virtual void cancelDownload(const QString &message_id) = 0;
 signals:
+    void downloadStarted(const QString &messageId);
+
     void downloadProgress(
         const QString &messageId,
         qint64 received,

@@ -1,4 +1,5 @@
 #include "message_repository_impl.hpp"
+#include "storage/media_cache.hpp"
 #include "constants/app_constants.hpp"
 #include "network/json_serializer.hpp"
 #include "data/mapping/message_payload_mapper.hpp"
@@ -56,6 +57,8 @@ MessageRepositoryImpl::MessageRepositoryImpl(
 
     const QString current_userid = m_xmpp.get ()->currentJid ().split ("@").first ();
     m_currentUserId = current_userid;
+    connect(m_xmpp.get(), &core::xmpp::XmppManager::connectedChanged,
+            this, [this] { nextProcess(); });
     connect(
         m_xmpp.get (),
         &core::xmpp::XmppManager::messageReceived,
@@ -101,7 +104,7 @@ MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
         cache = localMessages(account, user_id, page);
 
         if (!cache.messages.isEmpty()) {
-            qDebug() << "Loaded cached messages";
+            qDebug() << "Loaded cached messages" << cache.total;
             promise->addResult(cache);
         }
     }
@@ -110,13 +113,12 @@ MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("limit"), QStringLiteral("200"));
     query.addQueryItem(QStringLiteral("page"), QString::number(page));
-
     // 3. Request server
-    m_network->get(
+  m_network->get(
                  core::constants::AppConstants::messages(user_id),
+                 3,
                  query
-                 )
-        .then(
+        ).then(
             QtFuture::Launch::Async,
             [promise, page, cache, account, user_id]
             (const core::network::NetworkResponse& response) {
@@ -124,7 +126,6 @@ MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
                 if (!response.isSuccess()) {
                     qWarning() << "Message request failed:"
                                << response.status_code;
-
                     promise->finish();
                     return;
                 }
@@ -195,6 +196,7 @@ MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
                 else {
                     promise->addResult(server);
                 }
+
                 promise->finish();
             }
             );
@@ -226,6 +228,7 @@ QFuture<QString> MessageRepositoryImpl::sendMessageNow(domain::entity::Payload p
                   if (error.isEmpty ()) {
                       saveMessage (payload.receiver_id, jsonString);
                   }
+                  emit messageSendFinished(payload.message_id, error);
                   return error;
              });
 }
@@ -292,6 +295,10 @@ void MessageRepositoryImpl::nextProcess()
         return;
     }
 
+    // Keep unsent work queued until XMPP's connected signal resumes processing.
+    if (!m_xmpp->isConnected()) {
+        return;
+    }
     m_processing = true;
     auto upload = m_queue.dequeue();
     QFuture<QString> sending;
@@ -332,7 +339,6 @@ void MessageRepositoryImpl::nextProcess()
         nextProcess();
     });
     watcher->setFuture(sending);
-
 }
 
 QFuture<QString> MessageRepositoryImpl::sendFiles(
@@ -351,7 +357,8 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
     }
 
     const QFileInfo info(attachment.url.toLocalFile());
-    if (!attachment.url.isLocalFile() || !info.isFile() || !info.isReadable() || info.size() <= 0) {
+    if (!attachment.url.isLocalFile() || !info.isFile()
+        || !info.isReadable() || info.size() <= 0) {
         return QtFuture::makeReadyValueFuture(QStringLiteral("File is missing, empty, or unreadable."));
     }
 
@@ -376,12 +383,15 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
         if (message.content.type == domain::entity::MessageType::Image) {
             prepared = task->cancellation->track(
                 core::media::ImageCompress::compressImageToCache(
-                    task->file_path, message.message_id + QStringLiteral("-0") ))
+                    task->file_path, message.message_id + QStringLiteral("-0"),
+                     message.sender_id))
                 .then([](const QString &path) {
                     return path.isEmpty() ? QString{} : QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
                 });
         }
+
         return prepared.then(this, [this, message, task](const QString &path) mutable {
+            // qDebug() << "============> Image compress url: " << task->file_path;
             if (task->cancellation->isCanceled()) {
                 return UploadCancellation::canceledFuture<QString>();
             }
@@ -390,7 +400,22 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
                     QStringLiteral("Could not compress image. No message was sent."));
             }
             task->file_path = path;
-            message.content.file_size = QFileInfo(QUrl(path).toLocalFile()).size();
+            const auto localPath = QUrl(path).toLocalFile();
+            if (core::storage::MediaCache::isCachePath(localPath)) {
+                message.content.file_size = core::storage::MediaCache::read(localPath).size();
+            } else {
+                message.content.file_size = QFileInfo(localPath).size();
+                if (message.content.type == domain::entity::MessageType::Voice) {
+                    const auto cached = core::storage::MediaCache::voicePath(
+                        message.message_id, QFileInfo(localPath).suffix(), message.sender_id);
+                    if (!core::storage::MediaCache::saveFile(cached, localPath)) {
+                        return QtFuture::makeReadyValueFuture(
+                            QStringLiteral("Unable to cache voice recording."));
+                    }
+                    // Keep the optimistic message playable after recording cleanup.
+                    message.content.localpath = cached;
+                }
+            }
             task->future = task->cancellation->track(m_xmpp->fileUpload(task->id, task->file_path));
 
 
@@ -404,7 +429,20 @@ QFuture<QString> MessageRepositoryImpl::sendFiles(
                 if (!task->cancellation->tryCommit()) {
                     return UploadCancellation::canceledFuture<QString>();
                 }
+                if (message.content.type == domain::entity::MessageType::File) {
+                    core::storage::MediaCache::saveLocalFilePath(
+                        upload.url, QUrl(task->file_path).toLocalFile(), currentUserId());
+                }
                 message.content.media_url = upload.url.toString(QUrl::FullyEncoded);
+                dto::MessageItemDto updated;
+                updated.id = message.message_id;
+                updated.sender_id = message.sender_id;
+                updated.recipient_id = message.receiver_id;
+                updated.body = data::mapping::toDto(message);
+                auto updatedMessage = updated.toDomain();
+                // Local cache paths belong to this device, not the wire payload.
+                updatedMessage.body.content.localpath = message.content.localpath;
+                emit messageUpdated(updatedMessage);
                 return sendMessageNow(message);
             }).unwrap();
         }).unwrap();
@@ -428,7 +466,6 @@ QFuture<bool> MessageRepositoryImpl::cancelFileUpload(const QString &upload_id)
     return QtFuture::makeReadyValueFuture (result);
 
 }
-
 
 QString MessageRepositoryImpl::currentUserId() const
 {

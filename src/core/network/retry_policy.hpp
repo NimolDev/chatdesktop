@@ -17,7 +17,7 @@ struct RetryPolicy
     // Total retries after the first attempt.
     int maximum_retries = 2;
 
-    // First retyr delay.
+    // First retry delay.
     int initial_delay_ms = 500;
 
     // Maximum allowed retry delay.

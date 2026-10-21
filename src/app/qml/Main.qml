@@ -66,6 +66,9 @@ ApplicationWindow {
             networkStatus.showStatus()
 
         }
+        function onIsRetryChanged() {
+            console.log("Retry Changed", NetworkMonitor.isRetry)
+        }
 
     }
 
@@ -111,29 +114,18 @@ ApplicationWindow {
         clip: true
         z: 10
 
-        color: "transparent"
+        color: Colors.suface1
 
         border.width: 1
         border.color: "#45FFFFFF"
 
         readonly property real duration: 450
 
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-
-            GradientStop {
-                position: 0.0
-                color: "#50FFFFFF"
-            }
-
-            GradientStop {
-                position: 0.5
-                color: "#25FFFFFF"
-            }
-
-            GradientStop {
-                position: 1.0
-                color: "#15FFFFFF"
+        onVisibleChanged: {
+            if (visible) {
+                NetworkMonitor.startRetryCountDown()
+            } else {
+                NetworkMonitor.stopRetryCountDown()
             }
         }
 
@@ -146,6 +138,7 @@ ApplicationWindow {
                 width: 20
                 height: 20
                 strokeWidth: 2
+                progressColor: Colors.textSecond
             }
 
             Text {
@@ -155,9 +148,43 @@ ApplicationWindow {
                       ? "Connecting"
                       : "Waiting for network"
 
-                color: networkStatus.isOnline
-                       ? Colors.success
-                       : Colors.error
+                color: Colors.textSecond
+            }
+            Text {
+                visible: NetworkMonitor.isRetry
+                anchors.verticalCenter: parent.verticalCenter
+                text: NetworkMonitor.retryCountDown + "s"
+                color: Colors.textSecond
+                font.family: Typography.family
+                font.pixelSize: Typography.caption
+                font.weight: Typography.regular
+
+            }
+            Button {
+                id: btnRetry
+                anchors.verticalCenter: parent.verticalCenter
+                height: 20
+
+                contentItem: Text {
+                    text: "Try Now"
+                    anchors.fill: parent
+                    color: Colors.textPrimary
+                    font {
+                        family: Typography.family
+                        weight: Typography.medium
+                        pixelSize: Typography.body
+                    }
+                }
+
+                background: null
+
+                hoverEnabled: true
+                onClicked: {
+                    NetworkMonitor.retry()
+                }
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
+                }
             }
         }
 

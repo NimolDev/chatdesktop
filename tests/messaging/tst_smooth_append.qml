@@ -129,6 +129,30 @@ TestCase {
                "Unexpected bottom gap: " + (body.height - bottom))
     }
 
+    function test_playbackBarKeepsMessageScreenPosition() {
+        for (let i = 0; i < 30; ++i) {
+            appendMessage()
+        }
+        const body = createTemporaryObject(factory, testCase)
+        const list = findChild(body, "messageList")
+        messages.initialMessagesLoaded()
+        tryVerify(() => list.animateAppends)
+        messages.isLoading = false
+        wait(260)
+        const last = list.itemAtIndex(messages.count - 1)
+        verify(last)
+        const screenY = last.mapToItem(testCase, 0, 0).y
+        // Opening the player moves the top edge while keeping the composer fixed.
+        body.y = 30
+        body.height = 370
+        tryVerify(() => !body.resizing)
+        fuzzyCompare(last.mapToItem(testCase, 0, 0).y, screenY, 1)
+        body.y = 0
+        body.height = 400
+        tryVerify(() => !body.resizing)
+        fuzzyCompare(last.mapToItem(testCase, 0, 0).y, screenY, 1)
+    }
+
     function test_resizeHeight_data() {
         return [{tag: "long", count: 20}, {tag: "short", count: 2}]
     }

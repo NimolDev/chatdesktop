@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 
 import Theme
-import Shared.UI
+
 import "components" as Components
 
 Item {
@@ -106,6 +106,10 @@ Item {
                               ? root.viewmodel.voiceController.isInPlay
                               : false
 
+        onOpenedChanged: {
+            console.log("opend", opened)
+        }
+
         // visible: root.viewmodel.voiceController.isInPlay
         height: 30
         color: Colors.suface1
@@ -113,18 +117,21 @@ Item {
             top:parent.top
             left: parent.left
             right: parent.right
+            topMargin: voicePlayStatus.opened ? 0 : -voicePlayStatus.height
         }
         z:1
-        transform: Translate {
-            id: voicePlayTrnaslate
-            y: voicePlayStatus.opened ? 0 : -voicePlayStatus.height
-            Behavior on y {
-               NumberAnimation {
-                   duration: 200
-                   // easing.type: Easing.OutCubic
-               }
-            }
-        }
+
+
+        // transform: Translate {
+        //     id: voicePlayTrnaslate
+        //     y: voicePlayStatus.opened ? 0 : -voicePlayStatus.height
+        //     Behavior on y {
+        //        NumberAnimation {
+        //            duration: 200
+        //            // easing.type: Easing.OutCubic
+        //        }
+        //     }
+        // }
         opacity: 1
         // visible: opacity > 0
 
@@ -305,50 +312,33 @@ Item {
         id: toolbar
         // visible: false
         anchors {
-            // top: voicePlayStatus.visible ? voicePlayStatus.bottom : parent.top
+            top: voicePlayStatus.opened ? voicePlayStatus.bottom : parent.top
             left: parent.left
             right: parent.right
         }
         z: 1
-        states: [
-            State {
-                name: "expanded"
-                when: voicePlayStatus.opened
-                AnchorChanges {
-                    target: toolbar
-                    anchors.top: voicePlayStatus.bottom
-                }
-            },
-            State {
-                name: "collapsed"
-                when: !voicePlayStatus.opened
-                AnchorChanges {
-                    target: toolbar
-                    anchors.top: parent.top
-                }
-            }
-        ]
-        transitions: [
-            Transition {
-                from: "collapsed"
-                to: "expanded"
-                AnchorAnimation {
-                    duration: 200
-                    // easing.type: Easing.OutCubic
-                }
+        // states: [
+        //     State {
+        //         name: "expanded"
+        //         when: voicePlayStatus.opened
+        //         AnchorChanges {
+        //             target: toolbar
+        //             anchors.top: voicePlayStatus.bottom
+        //         }
+        //     },
+        //     State {
+        //         name: "collapsed"
+        //         when: !voicePlayStatus.opened
+        //         AnchorChanges {
+        //             target: toolbar
+        //             anchors.top: parent.top
 
-            },
-            Transition {
-                from: "expanded"
+        //         }
+        //     }
+        // ]
+        // Change layout once so MessagingBody can preserve the visible rows
+        // in the same frame. Animating this anchor repeatedly resizes the list.
 
-                to: "collapsed"
-                AnchorAnimation {
-                    duration: 200
-                    // easing.type: Easing.InCubic
-                }
-
-            }
-        ]
 
         userName: root.userName
         userStatus: root.userStatus

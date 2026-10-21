@@ -119,5 +119,8 @@
         <file>icons/arrow.down.png</file>
         <file>icons/arrow.down@2x.png</file>
         <file>icons/arrow.down@3x.png</file>
+        <file>icons/clock.png</file>
+        <file>icons/clock@2x.png</file>
+        <file>icons/clock@3x.png</file>
     </qresource>
 </RCC>

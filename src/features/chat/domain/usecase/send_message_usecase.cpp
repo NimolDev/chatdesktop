@@ -78,7 +78,7 @@ QFuture<QString> SendMessageUsecase::sendVoice(
 namespace {
 
 QFuture<QString> sendAttachments(
-    repository::MessageRepository *repository, QObject *context,
+    repository::MessageRepository *repository, SendMessageUsecase *context,
     const QString &receiver, const QList<domain::AttachmentItem> &attachments,
     const QString &caption, repository::UploadCancellationPtr cancellation, std::optional<bool> imageOverride)
 {
@@ -135,12 +135,22 @@ QFuture<QString> sendAttachments(
             childCancellation->cancel();
         });
         QObject::connect(watcher, &QFutureWatcher<QString>::finished, context,
-                         [watcher, promise, remaining, error] {
+                         [watcher, promise, remaining, error, context, id = attachment.id] {
+            bool success = false;
             if (watcher->isCanceled()) {
                 *error = QStringLiteral("Upload canceled.");
-            } else if (!watcher->result().isEmpty()) {
-                *error = watcher->result();
+            } else {
+                try {
+                    const auto result = watcher->result();
+                    success = result.isEmpty();
+                    if (!success) {
+                        *error = result;
+                    }
+                } catch (...) {
+                    *error = QStringLiteral("File upload failed. Please retry.");
+                }
             }
+            emit context->fileUploadSettled(id, success);
             if (--*remaining == 0) {
                 promise->addResult(*error);
                 promise->finish();

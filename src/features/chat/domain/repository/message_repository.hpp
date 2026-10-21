@@ -35,6 +35,8 @@ public:
 signals:
     void messageReceived(const domain::entity::MessageItem &payload);
     void messageSent(const domain::entity::MessageItem &payload);
+    void messageUpdated(const domain::entity::MessageItem &payload);
+    void messageSendFinished(const QString &messageId, const QString &error);
     void fileUploadStated(const QString &id, const QString &file_path);
     void fileUploadProgress(const QString &id, double progress);
     void fileUploadFinish(const QString &id);
