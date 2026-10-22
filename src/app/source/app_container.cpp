@@ -211,10 +211,9 @@ void AppContainer::registerChat()
     m_container.registerFactory<domain::usecase::ConversationsUsecase> ([](ServiceContainer &c) {
         return std::make_shared<domain::usecase::ConversationsUsecase> (c.resolve<domain::repository::ConversationListRepository> ());
     });
-    m_container.registerSingleton<ConversationsVM> ([](ServiceContainer &c) {
+    m_container.registerFactory<ConversationsVM> ([](ServiceContainer &c) {
         return std::make_shared<ConversationsVM> (c.resolve<domain::usecase::ConversationsUsecase> ());
     });
-    ConversationsVM::setInstance (m_container.resolve<ConversationsVM> ().get ());
 
     m_container.registerSingleton<HomeChatVM> ([](ServiceContainer &c) {
         return std::make_shared<HomeChatVM> (c.resolve<domain::repository::MessageRepository> ());

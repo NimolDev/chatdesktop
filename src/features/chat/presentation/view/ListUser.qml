@@ -13,7 +13,7 @@ import "components" as Components
 Item {
     id: root
 
-    property int itemHeight: 60
+    property int itemHeight: 30
     property int padding: 0
     property bool isCompactMode: false
     property var model
@@ -28,13 +28,13 @@ Item {
     signal itemClicked(int index,string userName ,string userId)
 
 
-    // Component.onCompleted: {
-    //     ConversationsVM.fetchConversations();
-    // }
+
 
     Pane {
-        padding: 4
+        verticalPadding: AppLayouts.s_padding
+        padding: 0
         anchors.fill: parent
+        background: null
         ColumnLayout {
             anchors.fill: parent
             spacing: 4
@@ -73,7 +73,7 @@ Item {
                 Layout.fillHeight: true
 
                 clip: true
-                spacing: 1
+                spacing: 3
                 delegate: Components.ListUserItem {
                     required property int index
                     required property var model

@@ -23,12 +23,20 @@ class MessageRepository : public QObject
 public:
     explicit MessageRepository(QObject *parent = nullptr) : QObject(parent) {};
     virtual ~MessageRepository() = default;
+
     virtual QFuture<domain::entity::MessageResponse>fetchMessageById(QString user_id, int page) = 0;
     virtual QFuture<QString> sendMessage(domain::entity::Payload &payload) = 0;
-    virtual QFuture<QString> sendVoice(domain::entity::Payload &payload, const QUrl &file) = 0;
-    virtual QFuture<QString> sendImage(domain::entity::Payload &payload, const QList<domain::AttachmentItem> &attachments, UploadCancellationPtr cancellation = {}) = 0;
-    virtual QFuture<QString> sendFile(domain::entity::Payload &payload, const QUrl &file) = 0;
-    virtual QFuture<QString> sendFiles(domain::entity::Payload &payload, const domain::AttachmentItem &attachments, UploadCancellationPtr cancellation = {}) = 0;
+    virtual QFuture<QString> sendVoice(domain::entity::Payload &payload,
+                                       const QUrl &file) = 0;
+    virtual QFuture<QString> sendImage(domain::entity::Payload &payload,
+                                       const QList<domain::AttachmentItem> &attachments,
+                                       UploadCancellationPtr cancellation = {}) = 0;
+    virtual QFuture<QString> sendFile(domain::entity::Payload &payload,
+                                      const QUrl &file) = 0;
+    virtual QFuture<QString> sendFiles(domain::entity::Payload &payload,
+                                       const domain::AttachmentItem &attachments,
+                                       UploadCancellationPtr cancellation = {}) = 0;
+    virtual QFuture<QString> sendSticker(domain::entity::Payload &payload) = 0;
     virtual QFuture<bool> cancelFileUpload(const QString &upload_id) = 0;
     virtual QString currentUserId() const  = 0;
 

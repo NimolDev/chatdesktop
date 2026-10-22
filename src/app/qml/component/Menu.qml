@@ -12,6 +12,7 @@ import Features.Chat
 
 Page {
     id: root
+    required property ConversationsVM conversationsVM
     implicitHeight: 480
     implicitWidth: 730
     visible: false
@@ -286,6 +287,7 @@ Page {
     Component {
         id: chatPage
         ChatPage {
+            conversationsVM: root.conversationsVM
             visible: tabLoader.sourceComponent === chatPage
             anchors.fill: parent
         }

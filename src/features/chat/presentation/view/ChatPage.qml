@@ -9,6 +9,7 @@ import "components" as Components
 
 Page {
     id: chatPage
+    required property ConversationsVM conversationsVM
 
     visible: false
     implicitHeight: AppLayouts.minWidth
@@ -19,6 +20,7 @@ Page {
     property bool isCollapsed: false
     property string receiverId
     property string selectUserName
+    property bool isRequestShowEmoji: true // true: for show emoji, false: for show use profile
 
     signal resetMessagingStateRequested
     signal needScrollToLast
@@ -125,8 +127,21 @@ Page {
 
     onVisibleChanged: {
         if (visible) {
-            ConversationsVM.fetchConversations();
+            chatPage.conversationsVM.fetchConversations();
         }
+        console.log("ChatPage: ", visible)
+    }
+
+    Component.onCompleted: {
+        console.log("=====>ChatePage: View completed")
+    }
+    Component.onDestruction: {
+        console.log("=====>ChatePage: View destroyed")
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: Colors.background
     }
 
     Connections {
@@ -174,7 +189,7 @@ Page {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         width: d.sidebarWidth
-        sourceComponent: { ConversationsVM.isLoading
+        sourceComponent: { chatPage.conversationsVM.isLoading
                            ? conversationLoading
                            : conversationList
         }
@@ -193,7 +208,7 @@ Page {
             itemHeight: d.userItemHeight
             padding: AppLayouts.s_padding
             isCompactMode: width < d.minimumExpandedWidth
-            model: ConversationsVM
+            model: chatPage.conversationsVM
             onExpandRequested: chatPage.expandUserList()
             onItemClicked: function (index, userName, userId) {
                 if (index === d.itemSelectedIndex) {
@@ -433,7 +448,10 @@ Page {
 
                     // anchors.fill: parent
                     isShowEmojiSide: chatPage.isShowEmojiSide
-                    onEmojiSideToggleRequested: chatPage.toggleEmojiSide()
+                    onEmojiSideToggleRequested: {
+                        chatPage.isRequestShowEmoji = true
+                        chatPage.toggleEmojiSide()
+                    }
                     viewmodel: MessagingViewModel
                     userName: chatPage.selectUserName
                     onConversationReady: incomingReveal.restart()
@@ -464,7 +482,6 @@ Page {
                 }
         }
 
-
     }
 
     Components.RigthSideContainer {
@@ -473,6 +490,10 @@ Page {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         isShow: chatPage.isShowEmojiSide
+        isEmoji: chatPage.isRequestShowEmoji
+        onStickerClicked: url => {
+                              MessagingViewModel.sendSticker(url)
+                          }
     }
 
     Image {

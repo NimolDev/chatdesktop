@@ -127,13 +127,16 @@ Item {
     // Message view component
     Component {
         id: stickerMessage
-        StickerView {
-            maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
-            isOutgoing: root.isOutgoing
-            isSeen: root.isSeen
-            date: root.date
-            selected: root.selected
-            fileLocation: root.fileLocation
+        // StickerView {
+        //     maxBubbleWidth: Math.max(0, Math.min(root.maxBubbleWidth, messageLoader.width - root.padding))
+        //     isOutgoing: root.isOutgoing
+        //     isSeen: root.isSeen
+        //     date: root.date
+        //     selected: root.selected
+        //     fileLocation: root.fileLocation
+        // }
+        StickerMessageView {
+            viewmodel: root.viewmodel
         }
     }
 
@@ -157,8 +160,6 @@ Item {
             mediaControl: root.messagingViewModel
             selected: root.selected
             selectionMode: root.selectionMode
-
-
         }
     }
 

@@ -212,8 +212,8 @@ QFuture<QString> MessageRepositoryImpl::sendMessage(domain::entity::Payload &pay
     msgDto.sender_id = dto.sender_id;
     msgDto.recipient_id = dto.receiver_id;
     msgDto.body = std::move (dto);
-
     emit messageSent(msgDto.toDomain ());
+
     return enqueue([this, payload] {
         return sendMessageNow(payload);
     });
@@ -261,7 +261,19 @@ QFuture<QString> MessageRepositoryImpl::sendFile(
 
     return QtFuture::makeReadyValueFuture (QStringLiteral (""));
 }
-
+QFuture<QString> data::repository::MessageRepositoryImpl::sendSticker(domain::entity::Payload &payload)
+{
+    auto dto = data::mapping::toDto (payload);
+    dto::MessageItemDto msgDto;
+    msgDto.id = dto.message_id;
+    msgDto.sender_id = dto.sender_id;
+    msgDto.recipient_id = dto.receiver_id;
+    msgDto.body = std::move (dto);
+    emit messageSent (msgDto.toDomain ());
+    return enqueue ([this, payload] {
+        return sendMessageNow (payload);
+    });
+}
 QFuture<QString> MessageRepositoryImpl::enqueue(
     std::function<QFuture<QString>()> start,
     domain::repository::UploadCancellationPtr cancellation,
@@ -544,3 +556,5 @@ void MessageRepositoryImpl::onMessageReceived(const core::xmpp::Message &message
 
 } // namespace repository
 } // namespace data
+
+

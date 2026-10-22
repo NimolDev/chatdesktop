@@ -26,6 +26,7 @@
 
 
 #include "app_container.hpp"
+#include "chat/presentation/viewmodel/conversations_vm.hpp"
 #include "call_coordinator.hpp"
 
 #include "logging/logger.hpp"
@@ -168,7 +169,12 @@ int main(int argc, char *argv[])
     // variables are destroyed in reverse construction order.
 
     AppContainer app_container;
+    auto conversationsVM = app_container.container().resolve<ConversationsVM>();
     QQmlApplicationEngine engine;
+    QQmlEngine::setObjectOwnership(conversationsVM.get(), QQmlEngine::CppOwnership);
+    engine.setInitialProperties({
+        {QStringLiteral("conversationsVM"), QVariant::fromValue(conversationsVM.get())}
+    });
     appEngineRegister (app, engine);
 
 #ifdef QT_QML_DEBUG

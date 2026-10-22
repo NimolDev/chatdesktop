@@ -24,8 +24,6 @@ public:
     // MessageRepository interface
 public:
 
-    // using SendFunctiion = std::function<QFuture<bool>(core::xmpp::UploadedFile &)>;
-
     QFuture<domain::entity::MessageResponse > fetchMessageById(QString user_id, int page) override;
     QFuture<QString> sendMessage(domain::entity::Payload &payload) override;
     QString currentUserId() const override;
@@ -44,6 +42,7 @@ public:
         const domain::AttachmentItem &attachment,
         domain::repository::UploadCancellationPtr cancellation = {}) override;
     QFuture<bool> cancelFileUpload(const QString &upload_id) override;
+    QFuture<QString> sendSticker(domain::entity::Payload &payload) override;
 
 private:
 
@@ -82,6 +81,8 @@ private:
     void saveMessage(QString reciever_id, QString body);
 private slots:
     void onMessageReceived(const core::xmpp::Message &message);
+
+
 };
 
 } // namespace repository

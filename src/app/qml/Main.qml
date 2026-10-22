@@ -6,6 +6,7 @@ import QtQuick.Window
 
 import Localization
 import Theme
+import Features.Chat
 import Features.Auth
 import ChatApp
 import Shared.UI
@@ -16,6 +17,7 @@ import "component" as AppComponent
 
 ApplicationWindow {
     id: window
+    required property ConversationsVM conversationsVM
     width: AppLayouts.width
     height: AppLayouts.height
     minimumWidth: AppLayouts.minWidth
@@ -294,6 +296,7 @@ ApplicationWindow {
         id: mainWindow
 
         AppComponent.Menu {
+            conversationsVM: window.conversationsVM
             visible: pageLoader.sourceComponent == mainWindow ? true : false
             onLogoutClicked: {
                 AppController.logout()

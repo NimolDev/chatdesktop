@@ -340,10 +340,21 @@ void MessagingViewModel::requestCall(const QString &receiverId, const QString &u
 void MessagingViewModel::sendMessage(const QString &receiver_id, const QString &msg)
 {
     const QString id = QString(receiver_id).remove(QLatin1Char('-'));
-    // setMessageSending (true);
     m_msgUsecase->execute(id, msg).then(this, [this](const QString &error) {
         setMessageSendSuccess(error.isEmpty());
     });
+}
+
+void MessagingViewModel::sendSticker(const QString &sticker_path)
+{
+    if (m_activeConversationId.isEmpty ()) {
+        return;
+    }
+    m_msgUsecase->sendSticker (m_activeConversationId, sticker_path)
+        .then (this,
+              [this](QString error) {
+                  setMessageSendSuccess (error.isEmpty ());
+              });
 }
 
 void MessagingViewModel::sendVoice(qint64 duration)
@@ -408,6 +419,7 @@ void MessagingViewModel::sendVoice(qint64 duration)
     watcher->setFuture(sending);
 }
 
+
 void MessagingViewModel::sendSelectedAttachments(const QString &caption)
 {
     startAttachmentUpload(m_attachmentModel->getItems(), caption, std::nullopt);
@@ -426,7 +438,9 @@ void MessagingViewModel::sendFile(const QString &caption)
 }
 
 void MessagingViewModel::startAttachmentUpload(
-    const QList<domain::AttachmentItem> &attachments, const QString &caption, std::optional<bool> images)
+    const QList<domain::AttachmentItem> &attachments,
+    const QString &caption,
+    std::optional<bool> images)
 {
     // if (isUploadingAttachments()) {
     //     return;

@@ -2,7 +2,6 @@
 #define FEATURES_CHAT_PRESENTATION_VIEWMODEL_CONVERSATIONS_VM_HPP
 
 #include <QObject>
-#include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
 #include <QAbstractListModel>
 #include <QFutureWatcher>
@@ -13,7 +12,7 @@ class ConversationsVM : public QAbstractListModel
 {
     Q_OBJECT
     QML_ELEMENT
-    QML_SINGLETON
+    QML_UNCREATABLE("ConversationsVM is provided by the application")
 public:
     enum Roles {
        UuidRole = Qt::UserRole +1,
@@ -24,9 +23,6 @@ public:
     explicit ConversationsVM(
         std::shared_ptr<domain::usecase::ConversationsUsecase> usecase,
         QObject *parent = nullptr);
-
-    static ConversationsVM *create(QQmlEngine *engine, QJSEngine *scriptEngine);
-    static void setInstance(ConversationsVM *instance);
 
     Q_PROPERTY(bool isLoading READ isLoading NOTIFY isLoadingChanged FINAL)
 
@@ -47,7 +43,6 @@ private:
 private:
 
 
-    static ConversationsVM *s_instance;
     std::shared_ptr<domain::usecase::ConversationsUsecase> m_usecase;
 
     QFutureWatcher<QList<domain::entity::ConversationList>> m_watcher;

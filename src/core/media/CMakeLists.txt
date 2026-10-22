@@ -11,6 +11,7 @@ add_library(media STATIC
     m4a_encoder.hpp
     m4a_encoder.cpp
     image_compress.hpp image_compress.cpp
+
 )
 add_library(core::media ALIAS media)
 

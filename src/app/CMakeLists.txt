@@ -21,6 +21,27 @@ target_include_directories(ChatApp
         "${CMAKE_SOURCE_DIR}/src/features"
 )
 
+# ==========================================
+# Sticker Resources
+# ==========================================
+
+set(STICKER_DIR
+    "${CMAKE_SOURCE_DIR}/src/shared/assets/stickers"
+)
+
+file(GLOB_RECURSE STICKER_FILES
+    CONFIGURE_DEPENDS
+    "${STICKER_DIR}/*.png"
+)
+
+if(STICKER_FILES)
+    qt_add_resources(ChatApp "sticker_resources"
+        PREFIX "/stickers"
+        BASE "${STICKER_DIR}"
+        FILES ${STICKER_FILES}
+    )
+endif()
+
 set(CHATAPP_QML_FILES
     qml/Main.qml
     qml/SplashScreen.qml
@@ -190,6 +211,7 @@ target_link_libraries(ChatApp
         localization
         theme
         ui
+        assets
         authentication
         chat
         voip

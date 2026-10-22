@@ -83,6 +83,7 @@ public:
     Q_INVOKABLE void sendImage(const QString &caption);
     Q_INVOKABLE void sendFile( const QString &caption);
     Q_INVOKABLE void sendVoice(qint64 duration);
+    Q_INVOKABLE void sendSticker(const QString &sticker_path);
     Q_INVOKABLE void cancelAttachmentUpload();
     Q_INVOKABLE void downloadFile(const QString &messageId, int contentIndex = 0);
     Q_INVOKABLE void cancelFileDownload(const QString &messageId, int contentIndex = 0);

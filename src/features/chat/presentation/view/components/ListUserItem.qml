@@ -9,28 +9,30 @@ import Shared.UI
 Item {
     id: root
     implicitWidth: 300
-    implicitHeight: 50
+    // implicitHeight: 30
     // anchors.fill: parent
     property bool isActive: true
     property bool isCompactMode: false
     property bool isSeen: true
     property int padding: 0
-    property string username: "Username"
-    property string message: "Message"
+    property string username: ""
+    property string message: ""
+    property bool isOnline: true
 
 
     property bool isSelected: false
     signal itemClicked()
 
-    Pane {
+    Rectangle {
+        id: pane
         anchors.fill: parent
-        padding: root.padding
-        background: Rectangle {
-            color: root.isSelected ? Colors.primary900 : Colors.background
-        }
+        color:  root.isSelected ? Colors.primary800 : (mouseArea.containsMouse ? Colors.suface1 : Colors.background)
+        enabled: true
 
         RowLayout {
             anchors.fill: parent
+            anchors.margins: AppLayouts.m_padding
+            // anchors.rightMargin: AppLayouts.m_padding
 
             // --- Profile ----
             Item {
@@ -44,14 +46,16 @@ Item {
                     // borderWidth: 0
                 }
                 Rectangle {
-                    visible: true
-                    width: 12
-                    height: 12
+                    visible: root.isOnline
+                    width: 14
+                    height: 14
                     radius: width / 2
                     anchors.right: imgProfile.right
                     anchors.bottom: imgProfile.bottom
                     // anchors.rightMargin: 0
                     color: root.isActive ?  Colors.success : Colors.error
+                    border.width: 2
+                    border.color: root.isSelected ? Colors.primary800 : (mouseArea.containsMouse ? Colors.suface1 : Colors.background)
                 }
             }
 
@@ -128,8 +132,10 @@ Item {
     }
 
     MouseArea {
+        id: mouseArea
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
+        hoverEnabled: true
         onClicked: {
             root.itemClicked()
         }

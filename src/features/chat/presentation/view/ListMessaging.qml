@@ -317,28 +317,6 @@ Item {
             right: parent.right
         }
         z: 1
-        // states: [
-        //     State {
-        //         name: "expanded"
-        //         when: voicePlayStatus.opened
-        //         AnchorChanges {
-        //             target: toolbar
-        //             anchors.top: voicePlayStatus.bottom
-        //         }
-        //     },
-        //     State {
-        //         name: "collapsed"
-        //         when: !voicePlayStatus.opened
-        //         AnchorChanges {
-        //             target: toolbar
-        //             anchors.top: parent.top
-
-        //         }
-        //     }
-        // ]
-        // Change layout once so MessagingBody can preserve the visible rows
-        // in the same frame. Animating this anchor repeatedly resizes the list.
-
 
         userName: root.userName
         userStatus: root.userStatus

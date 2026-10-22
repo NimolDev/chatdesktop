@@ -209,5 +209,23 @@ QFuture<bool> SendMessageUsecase::cancelUpload(const QString &upload_id)
     return m_repository->sendMessage (payload);
 }
 
+QFuture<QString> SendMessageUsecase::sendSticker(const QString &receiver_id,
+                                                 const QString &sticker_path)
+{
+    domain::entity::Payload payload;
+    payload.sender_id = m_repository->currentUserId ();
+    payload.receiver_id = receiver_id;
+    payload.message_id = QUuid::createUuid ().toString (QUuid::WithoutBraces);
+    payload.reply_message_id = NULL;
+    payload.timestamp = QString::number (QDateTime::currentSecsSinceEpoch ());
+    payload.content.type = domain::entity::MessageType::Sticker;
+    payload.content.text = NULL;
+    payload.content.media_url = sticker_path;
+    payload.content.file_size = 0;
+    payload.content.file_name = 0;
+    return m_repository->sendSticker (payload);
+}
+
+
 } // namespace usecase
 } // namespace domain

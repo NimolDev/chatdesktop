@@ -9,7 +9,7 @@
     presentation/view/components/TextMessageView.qml
     presentation/view/components/ImageMessageView.qml
     presentation/view/components/FileMessageView.qml
-    presentation/view/components/StickerView.qml
+
     presentation/view/components/ToolbarButton.qml
     presentation/view/components/TextCounter.qml
     presentation/view/components/EmojiPopup.qml
@@ -79,6 +79,9 @@ qt_add_qml_module(chat
         presentation/viewmodel/attachment_model.cpp
         presentation/coordinator/image_view_coordinator.hpp
         presentation/coordinator/image_view_coordinator.cpp
+        QML_FILES presentation/view/components/StickerMessageView.qml
+        QML_FILES presentation/view/components/StickerListView.qml
+        QML_FILES presentation/view/components/UserProfileView.qml
 
 )
 
