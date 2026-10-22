@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory(prefix="messaging-tests-") as directory:
     work = pathlib.Path(directory)
     subject = work / "subject"
     subject.mkdir()
-    for name in ("MessagingBody", "MessageBubble", "TextMessageView", "VoiceMessageView", "ImageMessageView", "FileMessageView", "StickerView"):
+    for name in ("MessagingBody", "MessageBubble", "TextMessageView", "VoiceMessageView", "ImageMessageView", "FileMessageView", "StickerMessageView"):
         shutil.copy(root / f"src/features/chat/presentation/view/components/{name}.qml", subject)
     shutil.copy(root / "src/features/chat/presentation/view/ImageViewWindow.qml", subject)
     # Bake the production effect for the isolated QML fixture.
@@ -44,10 +44,10 @@ with tempfile.TemporaryDirectory(prefix="messaging-tests-") as directory:
     voice.write_text(voice.read_text().replace("id: voiceSlider1\n", 'id: voiceSlider1\n                    objectName: "outgoingSlider"\n'))
     chat = work / "Features/Chat"
     chat.mkdir(parents=True)
-    (chat / "qmldir").write_text("module Features.Chat\nBubble 1.0 Bubble.qml\nsingleton MessagingViewModel 1.0 MessagingViewModel.qml\n")
+    (chat / "qmldir").write_text("module Features.Chat\nBubble 1.0 Bubble.qml\nMessagingViewModel 1.0 MessagingViewModel.qml\n")
     (chat / "Bubble.qml").write_text('import QtQuick\nRectangle { property bool outgoing; property bool showTail }')
     (chat / "MessagingViewModel.qml").write_text(
-        'pragma Singleton\nimport QtQuick\nQtObject {\n'
+        'import QtQuick\nQtObject {\n'
         '    property var conversationImages: []\n'
         '    property var imageUrls: []\n'
         '    function getImageList() { imageUrls = conversationImages.slice() }\n'

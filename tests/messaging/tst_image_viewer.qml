@@ -1,12 +1,15 @@
 import QtQuick
 import QtTest
+import Features.Chat
 import "subject" as Subject
 
 TestCase {
     name: "ImageViewerZoom"
     when: windowShown
 
-    Component { id: factory; Subject.ImageViewWindow {} }
+    MessagingViewModel { id: testModel }
+    Component { id: modelFactory; MessagingViewModel {} }
+    Component { id: factory; Subject.ImageViewWindow { messagingVM: testModel } }
 
     function test_commandScrollAndPan() {
         const viewer = createTemporaryObject(factory, null, {width: 600, height: 400, visible: true})

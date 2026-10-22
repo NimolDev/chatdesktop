@@ -5,12 +5,29 @@ import QtQuick.Layouts
 import Theme
 import Localization
 import Shared.UI
-import Features.Auth
+import App.Services 1.0
+
 
 Page {
     id: loginPage
     implicitWidth: AppLayouts.minWidth
     implicitHeight: AppLayouts.minHeight
+
+    property var loginVM: null
+
+    function createLoginVM() {
+        if (!loginVM) {
+            loginVM = AppContainer.createLoginVM(loginPage)
+        }
+    }
+
+    function destroyLoginVM() {
+        var oldVM = loginVM
+        loginVM = null
+        AppContainer.destroyViewModel(oldVM)
+    }
+
+    Component.onCompleted: createLoginVM()
 
     signal loginSucceeded(string userName)
 
@@ -79,20 +96,21 @@ Page {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 45
                 text: AppStrings.login
+                enabled: loginPage.loginVM !== null
                 onClicked: {
-                    LoginVM.login(txtUserName.text, txtPassword.text)
+                    loginPage.loginVM.login(txtUserName.text, txtPassword.text)
                 }
             }
         }
     }
 
     Connections {
-        target: LoginVM
+        target: loginPage.loginVM
 
         function onLoginSucceeded() {
-            console.log("user name", LoginVM.userName)
-            console.log("user name", LoginVM.userJid)
-            loginPage.loginSucceeded(LoginVM.userName)
+            console.log("user name", loginPage.loginVM.userName)
+            console.log("user name", loginPage.loginVM.userJid)
+            loginPage.loginSucceeded(loginPage.loginVM.userName)
         }
         function onConnecting() {
             console.log("Connecting to server...")

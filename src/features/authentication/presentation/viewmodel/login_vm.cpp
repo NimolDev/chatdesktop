@@ -1,8 +1,8 @@
 #include "login_vm.hpp"
+#include <QDebug>
 
 
 
-LoginVM *LoginVM::s_instance = nullptr;
 
 LoginVM::LoginVM(std::shared_ptr<domain::usecase::LoginUseCase> usecase, QObject *parent)
     : m_usecase(std::move (usecase)),
@@ -20,6 +20,7 @@ LoginVM::LoginVM(std::shared_ptr<domain::usecase::LoginUseCase> usecase, QObject
     //         emit loginSucceeded ();
     //     }
     // );
+    qDebug() << "=======> Login VM: Create <=======";
 
     connect(
         m_usecase.get (),
@@ -45,28 +46,17 @@ LoginVM::LoginVM(std::shared_ptr<domain::usecase::LoginUseCase> usecase, QObject
         &domain::usecase::LoginUseCase::loginSucceded,
         this,
         [this]() {
-            emit loginSucceeded ();
             setIsLoggedIn (true);
+            emit loginSucceeded ();
         }
         );
 
 
 }
 
-LoginVM *LoginVM::create(QQmlEngine *engine, QJSEngine *scriptEngine)
+LoginVM::~LoginVM()
 {
-    Q_UNUSED(scriptEngine)
-    Q_ASSERT(s_instance);
-    Q_ASSERT(s_instance->thread() == engine->thread());
-
-    QQmlEngine::setObjectOwnership(s_instance, QQmlEngine::CppOwnership);
-    return s_instance;
-}
-
-void LoginVM::setInstance(LoginVM *instance)
-{
-    Q_ASSERT(instance);
-    s_instance = instance;
+    qDebug() << "=======> Login VM: Destroy <=======";
 }
 
 void LoginVM::login(const QString user_name, const QString password)

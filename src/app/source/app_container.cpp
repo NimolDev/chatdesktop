@@ -7,7 +7,6 @@
 #include "voip/presentation/viewmodel/call_vm.hpp"
 
 #include "constants/app_constants.hpp"
-#include "repository/conversations_repository_impl.hpp"
 
 #include "network/auth_interceptor.hpp"
 #include "network/network_client.hpp"
@@ -26,7 +25,14 @@
 #include "chat/data/repository/media_repository_impl.hpp"
 #include "chat/domain/usecase/message_usecase.hpp"
 #include "chat/presentation/viewmodel/messaging_vm.hpp"
-#include "chat/presentation/viewmodel/home_chat_vm.hpp"
+#include "repository/conversations_repository_impl.hpp"
+
+
+
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QtQml/qqml.h>
 
 
 
@@ -38,13 +44,62 @@ AppContainer::AppContainer()
     registerCoreService ();
     registerAppController ();
     registerAuthentication ();
-    registerChat ();
+    registerChat();
     registerVoip();
+
+    qmlRegisterSingletonInstance("App.Services", 1, 0, "AppContainer", this);
 }
 
 AppContainer::~AppContainer()
 {
     shutdownXmpp ();
+}
+
+QObject *AppContainer::ownViewModel(QObject *viewModel)
+{
+    QQmlEngine::setObjectOwnership(viewModel, QQmlEngine::CppOwnership);
+    m_pageViewModels.insert(viewModel);
+    connect(viewModel, &QObject::destroyed, this, [this, viewModel]() {
+        m_pageViewModels.remove(viewModel);
+    });
+    return viewModel;
+}
+
+QObject *AppContainer::createLoginVM(QObject *page)
+{
+    if (!page) {
+        return nullptr;
+    }
+    return ownViewModel(new LoginVM(
+        m_container.resolve<domain::usecase::LoginUseCase>(), page));
+}
+
+QObject *AppContainer::createMessagingVM(QObject *page)
+{
+    if (!page) {
+        return nullptr;
+    }
+    return ownViewModel(new MessagingViewModel(
+        m_container.resolve<domain::usecase::MessageUsecase>(),
+        m_container.resolve<domain::usecase::SendMessageUsecase>(),
+        page,
+        m_container.resolve<domain::repository::MediaRepository>()));
+}
+
+QObject *AppContainer::createConversationVM(QObject *page)
+{
+    return ownViewModel (new ConversationsVM(
+        m_container.resolve<domain::usecase::ConversationsUsecase>(),
+        page));
+}
+
+void AppContainer::destroyViewModel(QObject *viewModel)
+{
+    if (!m_pageViewModels.remove(viewModel)) {
+        return;
+    }
+    // Defer deletion so callers can safely finish handling a VM signal.
+    viewModel->deleteLater();
 }
 
 void AppContainer::setupXmpp()
@@ -118,8 +173,6 @@ void AppContainer::registerCoreService()
             return std::make_shared<core::network::logging::LoggingInterceptor> ();
         });
 
-
-
     m_container.registerFactory<core::network::NetworkClient> ([](ServiceContainer &c) {
         auto client = std::make_shared<core::network::NetworkClient>
             (core::constants::AppConstants::baseUrl ());
@@ -171,11 +224,7 @@ void AppContainer::registerAuthentication()
     m_container.registerFactory<domain::usecase::LoginUseCase> ([] (ServiceContainer &c) {
         return std::make_shared<domain::usecase::LoginUseCase> (c.resolve<domain::repository::LoginRepository> ());
     });
-    m_container.registerSingleton<LoginVM> ([](ServiceContainer &c) {
-        return std::make_shared<LoginVM> (c.resolve<domain::usecase::LoginUseCase> ());
-    });
 
-    LoginVM::setInstance(m_container.resolve<LoginVM>().get());
 }
 
 void AppContainer::registerChat()
@@ -195,16 +244,6 @@ void AppContainer::registerChat()
     m_container.registerFactory<domain::usecase::SendMessageUsecase> ([](ServiceContainer &c) {
         return std::make_shared<domain::usecase::SendMessageUsecase> (c.resolve<domain::repository::MessageRepository> ());
     });
-    m_container.registerSingleton<MessagingViewModel> ([](ServiceContainer &c) {
-        return std::make_shared<MessagingViewModel> (
-            c.resolve<domain::usecase::MessageUsecase> (),
-            c.resolve<domain::usecase::SendMessageUsecase> (),
-            nullptr,
-            c.resolve<domain::repository::MediaRepository>()
-            );
-    });
-    MessagingViewModel::setInstance (m_container.resolve<MessagingViewModel> ().get ());
-
     m_container.registerFactory<domain::repository::ConversationListRepository> ([](ServiceContainer &c) {
         return std::make_shared<data::repository::ConversationsRepositoryImpl> (c.resolve<core::network::NetworkClient> ());
     });
@@ -215,24 +254,9 @@ void AppContainer::registerChat()
         return std::make_shared<ConversationsVM> (c.resolve<domain::usecase::ConversationsUsecase> ());
     });
 
-    m_container.registerSingleton<HomeChatVM> ([](ServiceContainer &c) {
-        return std::make_shared<HomeChatVM> (c.resolve<domain::repository::MessageRepository> ());
-    });
 
-    home_chat =  m_container.resolve<HomeChatVM> ().get ();
-    HomeChatVM::setInstance (home_chat);
-
-    // QObject::connect (
-    //     home_chat,
-    //     &HomeChatVM::messageReceived,
-    //     this,
-    //     [this](const domain::entity::MessageItem &payload)  {
-
-    //     }
-    //     );
 
 }
-
 
 void AppContainer::registerVoip()
 {
@@ -248,33 +272,4 @@ void AppContainer::registerVoip()
     });
     CallVM::setInstance(m_container.resolve<CallVM>().get());
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

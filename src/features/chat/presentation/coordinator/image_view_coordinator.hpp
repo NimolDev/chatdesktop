@@ -1,6 +1,7 @@
 #pragma once
 
 #include "platform/platform_main_window.hpp"
+#include "presentation/viewmodel/messaging_vm.hpp"
 
 #include <QObject>
 #include <QPointer>
@@ -21,7 +22,7 @@ public:
     explicit ImageViewCoordinator(QObject *parent = nullptr);
     ~ImageViewCoordinator() override;
 
-    Q_INVOKABLE void open(const QUrl &source);
+    Q_INVOKABLE void open(const QUrl &source, MessagingViewModel *viewModel);
 
 private:
     core::platform::PlatformMainWindow m_platform;

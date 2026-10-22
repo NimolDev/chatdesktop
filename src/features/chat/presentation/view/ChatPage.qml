@@ -4,12 +4,22 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 import Theme
+import App.Services 1.0
 import Features.Chat
+import Features.Voip
 import "components" as Components
 
 Page {
     id: chatPage
-    required property ConversationsVM conversationsVM
+    readonly property MessagingViewModel messagingVM: AppContainer.createMessagingVM(chatPage)
+    readonly property ConversationsVM conversationsVM: AppContainer.createConversationVM(chatPage)
+    Connections {
+        target: chatPage.messagingVM
+        function onCallRequested(receiverId, userName) {
+            CallVM.requestCall(receiverId, userName)
+        }
+    }
+
 
     visible: false
     implicitHeight: AppLayouts.minWidth
@@ -62,7 +72,7 @@ Page {
     function showConversation(index, userName, userId) {
         const switchId = ++d.switchId
         incomingReveal.stop()
-        // MessagingViewModel.resetModel()
+        // chatPage.messagingVM.resetModel()
 
         function activateConversation() {
             if (switchId !== d.switchId)
@@ -74,7 +84,7 @@ Page {
             chatPage.selectUserName = userName
             loaderMessage.opacity = 0
             loaderMessage.x = 0
-            MessagingViewModel.fetchMessage(userId)
+            chatPage.messagingVM.fetchMessage(userId)
 
         }
 
@@ -145,7 +155,7 @@ Page {
     }
 
     Connections {
-        target: MessagingViewModel
+        target: chatPage.messagingVM
         function onMessageChanged() {
             chatPage.needScrollToLast()
         }
@@ -217,7 +227,7 @@ Page {
                 userList.selectedIndex = index
                 userList.userName = userName
                 userList.userId = userId
-                if (MessagingViewModel.voiceController.isVoiceRecording || MessagingViewModel.voiceController.isVoiceRecordingPaused) {
+                if (chatPage.messagingVM.voiceController.isVoiceRecording || chatPage.messagingVM.voiceController.isVoiceRecordingPaused) {
                     alertPopup.open()
                     return;
                 }
@@ -452,21 +462,21 @@ Page {
                         chatPage.isRequestShowEmoji = true
                         chatPage.toggleEmojiSide()
                     }
-                    viewmodel: MessagingViewModel
+                    viewmodel: chatPage.messagingVM
                     userName: chatPage.selectUserName
                     onConversationReady: incomingReveal.restart()
                     onCallRequested: {
                         if (chatPage.receiverId) {
-                            MessagingViewModel.requestCall(chatPage.receiverId, chatPage.selectUserName)
+                            chatPage.messagingVM.requestCall(chatPage.receiverId, chatPage.selectUserName)
                         }
                     }
-                    isVisible: !MessagingViewModel.isLoading
+                    isVisible: !chatPage.messagingVM.isLoading
                     onMessageSubmitted: msg => {
-                        MessagingViewModel.sendMessage(chatPage.receiverId, msg);
+                        chatPage.messagingVM.sendMessage(chatPage.receiverId, msg);
                     }
                     onDeleteSelectedRequested:(indexes) => {
                                                   console.log("Delete Message",indexes);
-                                                  MessagingViewModel.deleteMessage(indexes)
+                                                  chatPage.messagingVM.deleteMessage(indexes)
                                               }
 
                     Connections {
@@ -492,7 +502,7 @@ Page {
         isShow: chatPage.isShowEmojiSide
         isEmoji: chatPage.isRequestShowEmoji
         onStickerClicked: url => {
-                              MessagingViewModel.sendSticker(url)
+                              chatPage.messagingVM.sendSticker(url)
                           }
     }
 

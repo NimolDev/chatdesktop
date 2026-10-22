@@ -21,6 +21,8 @@ public:
         QObject *parent = nullptr
         );
 
+    ~MessageRepositoryImpl() override;
+
     // MessageRepository interface
 public:
 

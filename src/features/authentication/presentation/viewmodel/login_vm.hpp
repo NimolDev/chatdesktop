@@ -3,24 +3,18 @@
 
 #include "domain/usecase/login_use_case.hpp"
 #include <QObject>
-#include <QQmlEngine>
-#include <QtQml/qqmlregistration.h>
 
 
 class LoginVM : public QObject
 {
     Q_OBJECT
-    QML_ELEMENT
-    QML_SINGLETON
 
 public:
     explicit LoginVM(
         std::shared_ptr<domain::usecase::LoginUseCase> usecase,
         QObject *parent = nullptr
         );
-
-    static LoginVM *create(QQmlEngine *engine, QJSEngine *scriptEngine);
-    static void setInstance(LoginVM *instance);
+    ~LoginVM();
 
     Q_PROPERTY(bool isLoading READ isLoading WRITE setIsLoading NOTIFY isLoadingChanged FINAL)
     Q_PROPERTY(QString userName READ userName NOTIFY loginSucceeded FINAL)
@@ -48,8 +42,6 @@ private:
     void setIsLoggedIn(bool loggedIn);
 
 private:
-    static LoginVM *s_instance;
-
     std::shared_ptr<domain::usecase::LoginUseCase> m_usecase;
 
     bool m_loading = false;

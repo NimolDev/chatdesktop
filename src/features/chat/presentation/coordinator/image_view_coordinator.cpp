@@ -17,9 +17,9 @@ ImageViewCoordinator::~ImageViewCoordinator()
     delete m_window.data();
 }
 
-void ImageViewCoordinator::open(const QUrl &source)
+void ImageViewCoordinator::open(const QUrl &source, MessagingViewModel *viewModel)
 {
-    if (source.isEmpty() || !source.isValid()) {
+    if (!viewModel || source.isEmpty() || !source.isValid()) {
         return;
     }
     if (!m_window) {
@@ -32,7 +32,8 @@ void ImageViewCoordinator::open(const QUrl &source)
         component.loadFromModule("Features.Chat", "ImageViewWindow");
         QObject *object = component.createWithInitialProperties({
             {QStringLiteral("visible"), false},
-            {QStringLiteral("imageSource"), source}
+            {QStringLiteral("imageSource"), source},
+            {QStringLiteral("messagingVM"), QVariant::fromValue(viewModel)}
         });
         auto *window = qobject_cast<QWindow *>(object);
         if (!window) {
@@ -46,6 +47,7 @@ void ImageViewCoordinator::open(const QUrl &source)
         m_platform.setup(window);
         m_platform.setWindowFillContent();
     }
+    m_window->setProperty("messagingVM", QVariant::fromValue(viewModel));
     QMetaObject::invokeMethod(m_window.data(), "reset");
     m_window->setProperty("imageSource", source);
     QMetaObject::invokeMethod(m_window.data(), "getImage");

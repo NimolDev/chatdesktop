@@ -73,8 +73,6 @@ qt_add_qml_module(chat
         presentation/viewmodel/voice_message_controller.cpp
         presentation/viewmodel/conversations_vm.hpp
         presentation/viewmodel/conversations_vm.cpp
-        presentation/viewmodel/home_chat_vm.hpp
-        presentation/viewmodel/home_chat_vm.cpp
         presentation/viewmodel/attachment_model.hpp
         presentation/viewmodel/attachment_model.cpp
         presentation/coordinator/image_view_coordinator.hpp

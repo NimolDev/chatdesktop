@@ -12,17 +12,18 @@ class ConversationsVM : public QAbstractListModel
 {
     Q_OBJECT
     QML_ELEMENT
-    QML_UNCREATABLE("ConversationsVM is provided by the application")
 public:
     enum Roles {
        UuidRole = Qt::UserRole +1,
-     NameRole
+      NameRole
 
     };
+
 
     explicit ConversationsVM(
         std::shared_ptr<domain::usecase::ConversationsUsecase> usecase,
         QObject *parent = nullptr);
+    ~ConversationsVM();
 
     Q_PROPERTY(bool isLoading READ isLoading NOTIFY isLoadingChanged FINAL)
 

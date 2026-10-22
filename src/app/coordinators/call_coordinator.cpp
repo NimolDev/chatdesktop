@@ -17,7 +17,6 @@ CallCoordinator::CallCoordinator(AppContainer &appContainer, QQmlEngine &engine,
 {
     auto &container = appContainer.container();
     setCallViewModel(container.resolve<CallVM>().get());
-    setChatViewModel(container.resolve<MessagingViewModel>().get());
     auto *controller = container.resolve<AppController>().get();
     connect(controller, &AppController::stateChanged, this, [this, controller] {
         if (controller->state() == AppController::AppState::Unauthenticated
@@ -33,7 +32,6 @@ void CallCoordinator::setCallViewModel(CallVM *viewModel)
     if (m_callViewModel == viewModel) {
         return;
     }
-    disconnect(m_callConnection);
     reset();
     if (m_callViewModel) {
         disconnect(m_callViewModel, nullptr, this, nullptr);
@@ -41,10 +39,6 @@ void CallCoordinator::setCallViewModel(CallVM *viewModel)
     m_callViewModel = viewModel;
     if (!viewModel) {
         return;
-    }
-    if (m_chatViewModel) {
-        m_callConnection = connect(m_chatViewModel, &MessagingViewModel::callRequested,
-                                   viewModel, &CallVM::requestCall);
     }
     connect(m_callViewModel, &CallVM::callWindowRequested,
             this, [this](const QString &receiverId, const QString &userName) {
@@ -69,22 +63,7 @@ void CallCoordinator::setCallViewModel(CallVM *viewModel)
 
 CallCoordinator::~CallCoordinator()
 {
-    disconnect(m_callConnection);
     reset();
-}
-
-void CallCoordinator::setChatViewModel(MessagingViewModel *viewModel)
-{
-    if (m_chatViewModel == viewModel) {
-        return;
-    }
-    disconnect(m_callConnection);
-    reset();
-    m_chatViewModel = viewModel;
-    if (viewModel && m_callViewModel) {
-        m_callConnection = connect(viewModel, &MessagingViewModel::callRequested,
-                                   m_callViewModel, &CallVM::requestCall);
-    }
 }
 
 void CallCoordinator::showCallWindow(const QString &receiverId, const QString &userName,

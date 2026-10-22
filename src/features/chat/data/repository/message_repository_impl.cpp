@@ -80,6 +80,20 @@ MessageRepositoryImpl::MessageRepositoryImpl(
             );
 }
 
+MessageRepositoryImpl::~MessageRepositoryImpl()
+{
+    for (const auto &task : std::as_const(m_uploadTasks)) {
+        if (task && task->cancellation) {
+            task->cancellation->cancel();
+        }
+    }
+    while (!m_queue.isEmpty()) {
+        const auto entry = m_queue.dequeue();
+        entry.promise->future().cancel();
+        entry.promise->finish();
+    }
+}
+
 QFuture<domain::entity::MessageResponse>
 MessageRepositoryImpl::fetchMessageById(QString user_id, int page)
 {

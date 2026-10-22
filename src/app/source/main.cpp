@@ -26,7 +26,8 @@
 
 
 #include "app_container.hpp"
-#include "chat/presentation/viewmodel/conversations_vm.hpp"
+#include "chat/data/repository/message_history_cache.hpp"
+#include "storage/user_data.hpp"
 #include "call_coordinator.hpp"
 
 #include "logging/logger.hpp"
@@ -38,6 +39,7 @@
 #include "platform/platform_notification.hpp"
 
 namespace  {
+
 #ifdef QT_QML_DEBUG
 bool isQmlPreviewSession(int argc, char *argv[])
 {
@@ -169,12 +171,8 @@ int main(int argc, char *argv[])
     // variables are destroyed in reverse construction order.
 
     AppContainer app_container;
-    auto conversationsVM = app_container.container().resolve<ConversationsVM>();
+    auto xmppConnection = app_container.container().resolve<core::xmpp::XmppManager>();
     QQmlApplicationEngine engine;
-    QQmlEngine::setObjectOwnership(conversationsVM.get(), QQmlEngine::CppOwnership);
-    engine.setInitialProperties({
-        {QStringLiteral("conversationsVM"), QVariant::fromValue(conversationsVM.get())}
-    });
     appEngineRegister (app, engine);
 
 #ifdef QT_QML_DEBUG
@@ -248,13 +246,34 @@ int main(int argc, char *argv[])
 
     core::platform::PlaformNotification notifcation;
     notifcation.requestPermission ();
+    QObject notificationContext;
     // notifcation.show ("Hello", "test");
 
     QObject::connect (
-        app_container.home_chat,
-        &HomeChatVM::messageReceived,
-        [&notifcation, &app_core, &tray](const domain::entity::MessageItem &payload) {
-            notifcation.show (payload.sender_id, payload.body.content.text);
+        xmppConnection.get(),
+        &core::xmpp::XmppManager::messageReceived,
+        &notificationContext,
+        [&notifcation, &app_core, &tray, &xmppConnection](const core::xmpp::Message &message) {
+            const auto parsed = data::dto::PayloadDto::fromJsonString(message.body);
+            if (!parsed) {
+                return;
+            }
+            data::dto::MessageItemDto item;
+            item.id = parsed->message_id;
+            item.sender_id = parsed->sender_id;
+            item.recipient_id = parsed->receiver_id;
+            item.body = *parsed;
+            const auto user = core::storage::UserData::getCurrentUser();
+            const QString jid = xmppConnection->currentJid().section(QLatin1Char('@'), 0, 0);
+            const QString account = !jid.isEmpty() ? jid : (user ? user->user_id : QString{});
+            using data::repository::MessageHistoryCache;
+            const QString conversation = MessageHistoryCache::conversationId(item.sender_id)
+                    == MessageHistoryCache::conversationId(account)
+                ? item.recipient_id : item.sender_id;
+            if (!MessageHistoryCache::saveMessage(account, conversation, item)) {
+                qWarning() << "Could not cache incoming message";
+            }
+            notifcation.show (item.sender_id, item.body.content.text);
             app_core.appendNotificationCount (1);
             tray.updateIcon ();
         }

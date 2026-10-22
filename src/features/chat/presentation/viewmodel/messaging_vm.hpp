@@ -5,7 +5,6 @@
 #include <QObject>
 #include <optional>
 #include <QFutureWatcher>
-#include <QQmlEngine>
 #include <QtQml/qqmlregistration.h>
 
 #include "domain/usecase/message_usecase.hpp"
@@ -20,7 +19,7 @@ class MessagingViewModel : public QAbstractListModel
 {
     Q_OBJECT
     QML_ELEMENT
-    QML_SINGLETON
+    QML_UNCREATABLE("Created by the chat model factory")
 
 public:
     enum Roles {
@@ -56,8 +55,6 @@ public:
 
     ~MessagingViewModel() override;
 
-    static MessagingViewModel *create(QQmlEngine *engine, QJSEngine *scriptEngine);
-    static void setInstance(MessagingViewModel *instance);
 
 public:
     Q_PROPERTY(bool isLoading READ isLoading WRITE setIsLoading NOTIFY isLoadingChanged FINAL)
@@ -177,7 +174,7 @@ private:
 
 private:
 
-    static MessagingViewModel *s_instance;
+    void connectMessageUsecases();
 
     std::shared_ptr<domain::usecase::MessageUsecase> m_usecase;
     std::shared_ptr<domain::usecase::SendMessageUsecase> m_msgUsecase;

@@ -1,5 +1,6 @@
 #include "conversations_vm.hpp"
 
+
 ConversationsVM::ConversationsVM(
      std::shared_ptr<domain::usecase::ConversationsUsecase> usecase,
     QObject *parent
@@ -7,7 +8,7 @@ ConversationsVM::ConversationsVM(
     : m_usecase(std::move (usecase)),
     QAbstractListModel(parent)
 {
-    qDebug() << "ConverationVM instantiate";
+    qDebug() << "=======> MessagingViewModel: Create <=======";
     connect(&m_watcher,
             &QFutureWatcher<QList<domain::entity::ConversationList>>::resultReadyAt,
             this, [this](int index) {
@@ -21,6 +22,13 @@ ConversationsVM::ConversationsVM(
             &QFutureWatcher<QList<domain::entity::ConversationList>>::finished,
             this, &ConversationsVM::onFinished);
 }
+
+ConversationsVM::~ConversationsVM()
+{
+  qDebug() << "=======> MessagingViewModel: Destroy <=======";
+}
+
+
 
 void ConversationsVM::fetchConversations()
 {

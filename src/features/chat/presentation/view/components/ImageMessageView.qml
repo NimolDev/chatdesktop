@@ -192,7 +192,7 @@ Item {
                     enabled: !root.selectionMode && !root.isUploading && photo.status === Image.Ready
                     cursorShape: Qt.PointingHandCursor
                     onClicked:  {
-                        ImageViewCoordinator.open(root.imageSource)
+                        ImageViewCoordinator.open(root.imageSource, root.mediaControl)
                     }
                 }
 

@@ -6,6 +6,7 @@ import Theme
 
 Window {
     id: root
+    required property MessagingViewModel messagingVM
 
     property url imageSource
     property real zoom: 1
@@ -62,15 +63,24 @@ Window {
     }
 
     Connections {
-        target: MessagingViewModel
+        target: root.messagingVM
         function onImageUrlsChanged() {
-            root.imageList = MessagingViewModel.imageUrls
+            root.imageList = root.messagingVM.imageUrls
             root.updateIndex()
         }
     }
 
     function getImage() {
-        MessagingViewModel.getImageList()
+        if (root.messagingVM) {
+            root.messagingVM.getImageList()
+        }
+    }
+
+    onMessagingVMChanged: {
+        if (!messagingVM) {
+            reset()
+            hide()
+        }
     }
 
     function reset() {
